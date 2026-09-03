@@ -52,7 +52,7 @@ export const WeatherModal: React.FC<WeatherModalProps> = ({
         m.name.includes(destination)
     );
 
-    const targetElevation = matchedPreset?.elevation || (destination.includes('格聂') ? 4200 : 1500);
+    const targetElevation = matchedPreset?.elevation || (destination.includes('格聂') ? 4200 : undefined);
     const targetCoords = initialCoords || (matchedPreset ? { lat: matchedPreset.lat, lng: matchedPreset.lng } : { lat: 29.81, lng: 99.63 });
     setCoords(targetCoords);
     setCurrentDestination(matchedPreset ? matchedPreset.name : destination || '四川·格聂神山大环线');
@@ -66,7 +66,7 @@ export const WeatherModal: React.FC<WeatherModalProps> = ({
       const matched = POPULAR_MOUNTAINS.find(
         (m) => name.includes(m.name.split('·')[1] || m.name) || m.name.includes(name)
       );
-      const targetElevation = elevation || matched?.elevation || (name.includes('格聂') ? 4200 : 1500);
+      const targetElevation = elevation !== undefined ? elevation : (matched?.elevation || (name.includes('格聂') ? 4200 : undefined));
       const data = await weatherService.fetchWeather(lat, lng, name, targetElevation);
       setWeather(data);
     } catch (e) {
@@ -97,7 +97,8 @@ export const WeatherModal: React.FC<WeatherModalProps> = ({
     const fullName = `${res.name} (${res.country}${res.admin1 ? '·' + res.admin1 : ''})`;
     setCoords({ lat: res.lat, lng: res.lng });
     setCurrentDestination(res.name);
-    loadWeather(res.lat, res.lng, fullName);
+    // Use the actual elevation from search result (or undefined so Open-Meteo DEM computes true elevation)
+    loadWeather(res.lat, res.lng, fullName, res.elevation);
     setSearchResults([]);
     setSearchQuery('');
   };
@@ -266,7 +267,11 @@ export const WeatherModal: React.FC<WeatherModalProps> = ({
                   <span className="w-1.5 h-1.5 rounded-full bg-[#5A5A40]" />
                   <span>数据源：<strong>Open-Meteo 高清数值气象预报</strong>（集成 ECMWF IFS 与 CMA 中国气象局模式）</span>
                 </div>
-                <span>已按高程 (~{weather.elevation}m) 进行气温垂直递减率校准</span>
+                <span>
+                  {weather.elevation <= 100
+                    ? `真实平原高程 (~${weather.elevation}m)`
+                    : `已按山野高程 (~${weather.elevation}m) 进行气温垂直递减率校准`}
+                </span>
               </div>
 
               {/* Smart Weather Gear Recommendations */}
