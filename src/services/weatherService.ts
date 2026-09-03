@@ -36,7 +36,7 @@ export const weatherService = {
     const cacheKey = `hike_weather_${lat.toFixed(2)}_${lng.toFixed(2)}`;
 
     try {
-      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,precipitation&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max,uv_index_max&timezone=auto`;
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}${elevationFallback ? `&elevation=${elevationFallback}` : ''}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,precipitation&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max,uv_index_max&timezone=auto`;
 
       const response = await fetch(url);
       if (!response.ok) {
@@ -54,20 +54,20 @@ export const weatherService = {
         const code = data.daily.weather_code[i] ?? 0;
         dailyForecasts.push({
           date: times[i],
-          tempMax: Math.round(data.daily.temperature_2m_max[i] ?? 20),
-          tempMin: Math.round(data.daily.temperature_2m_min[i] ?? 10),
+          tempMax: Math.round(data.daily.temperature_2m_max[i] ?? 15),
+          tempMin: Math.round(data.daily.temperature_2m_min[i] ?? 4),
           weatherCode: code,
           weatherText: this.getWeatherInfo(code).text,
           rainProb: Math.round(data.daily.precipitation_probability_max?.[i] ?? 0),
           windSpeedMax: Math.round(data.daily.wind_speed_10m_max?.[i] ?? 15),
-          uvIndex: Math.round(data.daily.uv_index_max?.[i] ?? 4),
+          uvIndex: Math.round(data.daily.uv_index_max?.[i] ?? 6),
         });
       }
 
-      const currentTemp = Math.round(data.current?.temperature_2m ?? 18);
+      const currentTemp = Math.round(data.current?.temperature_2m ?? 12);
       const currentWind = Math.round(data.current?.wind_speed_10m ?? 12);
       const currentRain = Math.round(data.daily?.precipitation_probability_max?.[0] ?? 0);
-      const currentUv = Math.round(data.daily?.uv_index_max?.[0] ?? 5);
+      const currentUv = Math.round(data.daily?.uv_index_max?.[0] ?? 6);
       const elevation = Math.round(data.elevation || elevationFallback);
 
       // Generate smart hiking packing advice
@@ -127,26 +127,32 @@ export const weatherService = {
         // ignore
       }
 
-      // Return synthetic fallback if offline and no cache
+      // Dynamic realistic synthetic fallback based on altitude (lapse rate: ~6.5°C per 1000m)
+      const isHighAltitude = elevationFallback >= 3000;
+      const baseMax = isHighAltitude ? Math.max(5, Math.round(25 - (elevationFallback / 1000) * 3.5)) : 22;
+      const baseMin = isHighAltitude ? Math.max(-5, Math.round(14 - (elevationFallback / 1000) * 4.2)) : 12;
+
       return {
         locationName,
         latitude: lat,
         longitude: lng,
         elevation: elevationFallback,
-        currentTemp: 18,
+        currentTemp: Math.round((baseMax + baseMin) / 2),
         currentWeatherCode: 2,
-        currentWeatherText: '多云 (离线概览)',
-        currentWindSpeed: 14,
-        currentRainProb: 15,
-        currentUvIndex: 4,
+        currentWeatherText: '多云 (离线参考)',
+        currentWindSpeed: isHighAltitude ? 20 : 12,
+        currentRainProb: 20,
+        currentUvIndex: isHighAltitude ? 7 : 4,
         daily: [
-          { date: '今天', tempMax: 21, tempMin: 12, weatherCode: 2, weatherText: '局部多云', rainProb: 15, windSpeedMax: 16, uvIndex: 5 },
-          { date: '明天', tempMax: 19, tempMin: 10, weatherCode: 1, weatherText: '晴间多云', rainProb: 10, windSpeedMax: 14, uvIndex: 6 },
-          { date: '后天', tempMax: 17, tempMin: 9, weatherCode: 3, weatherText: '阴天', rainProb: 20, windSpeedMax: 18, uvIndex: 3 },
+          { date: '今天', tempMax: baseMax, tempMin: baseMin, weatherCode: 2, weatherText: '局部多云', rainProb: 20, windSpeedMax: 20, uvIndex: 7 },
+          { date: '明天', tempMax: baseMax - 1, tempMin: baseMin - 1, weatherCode: 1, weatherText: '晴间多云', rainProb: 15, windSpeedMax: 18, uvIndex: 8 },
+          { date: '后天', tempMax: baseMax - 2, tempMin: baseMin - 2, weatherCode: 3, weatherText: '阴天有阵雨', rainProb: 35, windSpeedMax: 24, uvIndex: 5 },
         ],
         gearRecommendations: [
-          '📶 当前处于离线状态，正在使用本地预估天气信息。',
-          '🎒 请无论晴雨均备齐三层穿衣原则（排汗层+保暖层+防风雨层）以应对山野突变。',
+          '📶 当前处于离线状态，正在使用基于海拔高程校准的本地参考天气。',
+          isHighAltitude
+            ? '⛰️ 高海拔严寒预警：昼夜温差极大（夜间气温接近冰点），务必准备温标零下的羽绒睡袋、防风硬壳冲锋衣与厚保暖层。'
+            : '🎒 请备齐三层穿衣原则（排汗层+保暖层+防风雨层）以应对山野突变。',
         ],
         lastFetched: Date.now(),
       };

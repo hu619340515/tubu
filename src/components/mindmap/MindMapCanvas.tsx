@@ -97,16 +97,16 @@ function getSmartPath(
   }
 
   if (kind === 'vertical-step') {
-    const x1 = source.x + source.width / 2;
-    const y1 = source.y + source.height;
-    const x2 = target.x + target.width / 2;
-    const y2 = target.y;
+    const x1 = Math.round(source.x + source.width / 2);
+    const y1 = Math.round(source.y + source.height);
+    const x2 = Math.round(target.x + target.width / 2);
+    const y2 = Math.round(target.y);
     const midX = Math.round((x1 + x2) / 2);
     const midY = Math.round((y1 + y2) / 2);
 
     if (y2 >= y1 + 5) {
-      if (Math.abs(x2 - x1) < 6) {
-        return { path: `M ${x1} ${y1} L ${x2} ${y2}`, marker: 'arrow-vertical', midX, midY };
+      if (Math.abs(x2 - x1) < 8) {
+        return { path: `M ${x1} ${y1} L ${x1} ${y2}`, marker: 'arrow-vertical', midX: x1, midY };
       }
       return {
         path: `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`,
@@ -120,12 +120,15 @@ function getSmartPath(
   // Smooth Bezier Curve (Organic & Beautiful)
   // If target is predominantly below source:
   if (target.y >= source.y + source.height - 10) {
-    const x1 = source.x + source.width / 2;
-    const y1 = source.y + source.height;
-    const x2 = target.x + target.width / 2;
-    const y2 = target.y;
+    const x1 = Math.round(source.x + source.width / 2);
+    const y1 = Math.round(source.y + source.height);
+    const x2 = Math.round(target.x + target.width / 2);
+    const y2 = Math.round(target.y);
     const midX = Math.round((x1 + x2) / 2);
     const midY = Math.round((y1 + y2) / 2);
+    if (Math.abs(x2 - x1) < 8) {
+      return { path: `M ${x1} ${y1} L ${x1} ${y2}`, marker: 'arrow-vertical', midX: x1, midY };
+    }
     const dy = Math.max(20, Math.abs(y2 - y1) * 0.5);
     return {
       path: `M ${x1} ${y1} C ${x1} ${y1 + dy}, ${x2} ${y2 - dy}, ${x2} ${y2}`,
@@ -1714,13 +1717,13 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
               <marker
                 id="vertical-arrow"
                 viewBox="0 0 10 10"
-                refX="5"
-                refY="7"
+                refX="7"
+                refY="5"
                 markerWidth="6"
                 markerHeight="6"
                 orient="auto"
               >
-                <path d="M 1.5 0 L 5 8 L 8.5 0 z" fill="#5A5A40" />
+                <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#5A5A40" />
               </marker>
               <marker
                 id="custom-arrow"
@@ -1767,7 +1770,9 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                     stroke={isSelected ? '#2563EB' : edge.color || '#5A5A40'}
                     strokeWidth={isSelected ? 4 : isSpine ? 3 : 2}
                     markerEnd={
-                      isSpine
+                      isSelected
+                        ? 'url(#custom-arrow)'
+                        : isSpine
                         ? 'url(#spine-arrow)'
                         : isVertical
                         ? 'url(#vertical-arrow)'

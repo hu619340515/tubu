@@ -21,6 +21,10 @@ export interface MountainPreset {
 
 export const POPULAR_MOUNTAINS: MountainPreset[] = [
   { name: '四川·格聂神山大环线', region: '甘孜理塘', lat: 29.81, lng: 99.63, elevation: 4200, recommendedSeason: '9月-10月金秋/6月花季' },
+  { name: '四川·理塘县城', region: '甘孜高城', lat: 29.99, lng: 100.27, elevation: 3960, recommendedSeason: '全年/初入高原适应中转' },
+  { name: '四川·折多山垭口', region: '康定与新都桥交界', lat: 30.07, lng: 101.81, elevation: 4298, recommendedSeason: '全年/翻山注意强风与降温' },
+  { name: '四川·新都桥镇', region: '甘孜康定', lat: 30.05, lng: 101.53, elevation: 3300, recommendedSeason: '9月-10月秋景摄影/低海拔过渡' },
+  { name: '四川·康定市区', region: '甘孜首府', lat: 30.05, lng: 101.96, elevation: 2560, recommendedSeason: '全年/高原第一站休整' },
   { name: '江西·武功山', region: '萍乡/吉安', lat: 27.46, lng: 114.18, elevation: 1918, recommendedSeason: '5月-10月高山草甸' },
   { name: '云南·梅里雪山/雨崩', region: '迪庆德钦', lat: 28.38, lng: 98.86, elevation: 3200, recommendedSeason: '10月-次年5月观日照金山' },
   { name: '四川·四姑娘山大峰', region: '阿坝小金', lat: 31.11, lng: 102.90, elevation: 5025, recommendedSeason: '6月-11月初级雪山' },

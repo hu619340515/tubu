@@ -52,17 +52,22 @@ export const WeatherModal: React.FC<WeatherModalProps> = ({
         m.name.includes(destination)
     );
 
-    const targetCoords = initialCoords || (matchedPreset ? { lat: matchedPreset.lat, lng: matchedPreset.lng } : { lat: 27.46, lng: 114.18 });
+    const targetElevation = matchedPreset?.elevation || (destination.includes('格聂') ? 4200 : 1500);
+    const targetCoords = initialCoords || (matchedPreset ? { lat: matchedPreset.lat, lng: matchedPreset.lng } : { lat: 29.81, lng: 99.63 });
     setCoords(targetCoords);
-    setCurrentDestination(matchedPreset ? matchedPreset.name : destination || '武功山');
+    setCurrentDestination(matchedPreset ? matchedPreset.name : destination || '四川·格聂神山大环线');
 
-    loadWeather(targetCoords.lat, targetCoords.lng, matchedPreset ? matchedPreset.name : destination || '徒步目的地');
-  }, [isOpen, destination]);
+    loadWeather(targetCoords.lat, targetCoords.lng, matchedPreset ? matchedPreset.name : destination || '格聂神山', targetElevation);
+  }, [isOpen, destination, initialCoords]);
 
-  const loadWeather = async (lat: number, lng: number, name: string) => {
+  const loadWeather = async (lat: number, lng: number, name: string, elevation?: number) => {
     setIsLoading(true);
     try {
-      const data = await weatherService.fetchWeather(lat, lng, name);
+      const matched = POPULAR_MOUNTAINS.find(
+        (m) => name.includes(m.name.split('·')[1] || m.name) || m.name.includes(name)
+      );
+      const targetElevation = elevation || matched?.elevation || (name.includes('格聂') ? 4200 : 1500);
+      const data = await weatherService.fetchWeather(lat, lng, name, targetElevation);
       setWeather(data);
     } catch (e) {
       console.error('Failed to load weather:', e);
@@ -74,7 +79,7 @@ export const WeatherModal: React.FC<WeatherModalProps> = ({
   const handleSelectPreset = (preset: MountainPreset) => {
     setCoords({ lat: preset.lat, lng: preset.lng });
     setCurrentDestination(preset.name);
-    loadWeather(preset.lat, preset.lng, preset.name);
+    loadWeather(preset.lat, preset.lng, preset.name, preset.elevation);
     setSearchResults([]);
     setSearchQuery('');
   };
@@ -177,8 +182,8 @@ export const WeatherModal: React.FC<WeatherModalProps> = ({
 
             {/* Popular Hiking Preset Buttons */}
             <div className="flex items-center gap-1.5 flex-wrap pt-1">
-              <span className="text-[11px] text-[#7A7465] shrink-0 font-medium">热门山野：</span>
-              {POPULAR_MOUNTAINS.slice(0, 6).map((m) => (
+              <span className="text-[11px] text-[#7A7465] shrink-0 font-medium">快捷打卡点：</span>
+              {POPULAR_MOUNTAINS.slice(0, 10).map((m) => (
                 <button
                   key={m.name}
                   type="button"
@@ -253,6 +258,15 @@ export const WeatherModal: React.FC<WeatherModalProps> = ({
                     <p className="text-base font-bold mt-0.5">UV {weather.currentUvIndex}</p>
                   </div>
                 </div>
+              </div>
+
+              {/* Data Source & High-altitude Lapse Rate note */}
+              <div className="flex flex-wrap items-center justify-between text-[11px] text-[#7A7465] px-1 gap-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#5A5A40]" />
+                  <span>数据源：<strong>Open-Meteo 高清数值气象预报</strong>（集成 ECMWF IFS 与 CMA 中国气象局模式）</span>
+                </div>
+                <span>已按高程 (~{weather.elevation}m) 进行气温垂直递减率校准</span>
               </div>
 
               {/* Smart Weather Gear Recommendations */}
