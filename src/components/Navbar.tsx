@@ -1,0 +1,141 @@
+import React from 'react';
+import {
+  Mountain,
+  Plus,
+  CloudSun,
+  User as UserIcon,
+  Download,
+  Share2,
+  ChevronDown,
+  ListTodo,
+  WifiOff,
+} from 'lucide-react';
+import { User, HikingList } from '../types';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import { usePWAInstall } from '../hooks/usePWAInstall';
+
+interface NavbarProps {
+  currentUser: User;
+  lists: HikingList[];
+  activeListId: string;
+  onSelectList: (id: string) => void;
+  onOpenNewList: () => void;
+  onOpenAuth: () => void;
+  onOpenWeather: () => void;
+}
+
+export const Navbar: React.FC<NavbarProps> = ({
+  currentUser,
+  lists,
+  activeListId,
+  onSelectList,
+  onOpenNewList,
+  onOpenAuth,
+  onOpenWeather,
+}) => {
+  const isOnline = useOnlineStatus();
+  const { isInstallable, install } = usePWAInstall();
+
+  const activeList = lists.find((l) => l.id === activeListId);
+
+  return (
+    <header className="sticky top-0 z-40 bg-[#EAE7DF]/95 text-[#2C2C2C] backdrop-blur border-b border-[#D9D4C7] shadow-xs">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
+        {/* Left: Brand Logo & Title */}
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-[#5A5A40] flex items-center justify-center text-white shadow-xs">
+            <Mountain className="w-5 h-5 stroke-[2.2]" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-base sm:text-lg font-serif font-bold tracking-tight text-[#2C2C2C]">
+                徒步物品清单检查站
+              </h1>
+              {!isOnline && (
+                <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider bg-[#FDF2F0] text-[#D27D59] border border-[#D27D59]/30 px-2 py-0.5 rounded-full">
+                  <WifiOff className="w-3 h-3" />
+                  <span>离线</span>
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-[#7A7465] hidden sm:block font-medium">
+              山野装备无痕打包 · 离线打卡 · 天气预警
+            </p>
+          </div>
+        </div>
+
+        {/* Center: Active Checklist Selector (on tablets & desktop) */}
+        <div className="hidden md:flex items-center gap-2 max-w-sm">
+          <div className="relative flex-1">
+            <select
+              value={activeListId}
+              onChange={(e) => onSelectList(e.target.value)}
+              className="w-full pl-3 pr-8 py-1.5 bg-white border border-[#D9D4C7] hover:border-[#5A5A40] text-xs font-medium text-[#2C2C2C] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#5A5A40] appearance-none cursor-pointer truncate shadow-2xs"
+            >
+              {lists.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.title} ({l.destination})
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="w-3.5 h-3.5 text-[#7A7465] absolute right-2.5 top-2.5 pointer-events-none" />
+          </div>
+
+          <button
+            type="button"
+            onClick={onOpenNewList}
+            className="p-1.5 bg-[#5A5A40] text-white hover:bg-[#484833] rounded-xl transition shadow-2xs"
+            title="新建清单"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Right Actions */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Weather Button */}
+          <button
+            type="button"
+            onClick={onOpenWeather}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-[#F0EEE8] border border-[#D9D4C7] text-xs font-medium text-[#2C2C2C] transition shadow-2xs"
+            title="查询目的地山野天气"
+          >
+            <CloudSun className="w-4 h-4 text-[#D27D59] shrink-0" />
+            <span className="hidden sm:inline">天气预报</span>
+          </button>
+
+          {/* In-App PWA Install Button */}
+          {isInstallable && (
+            <button
+              type="button"
+              onClick={install}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#D27D59] hover:bg-[#be6e4c] text-white text-xs font-bold transition shadow-xs"
+              title="安装为离线手机桌面应用"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">安装离线App</span>
+            </button>
+          )}
+
+          {/* User Account Button */}
+          <button
+            type="button"
+            onClick={onOpenAuth}
+            className="flex items-center gap-2 pl-2 pr-3 py-1.5 bg-white hover:bg-[#F0EEE8] border border-[#D9D4C7] rounded-xl transition group shadow-2xs"
+            title="切换或管理专属账户"
+          >
+            <span className="text-base leading-none p-1 bg-[#EAE7DF] rounded-lg group-hover:scale-105 transition">
+              {currentUser.avatar || '🏔️'}
+            </span>
+            <div className="text-left hidden sm:block">
+              <p className="text-xs font-bold text-[#2C2C2C] truncate max-w-[90px]">
+                {currentUser.username}
+              </p>
+              <p className="text-[10px] text-[#5A5A40] font-semibold">专属清单</p>
+            </div>
+          </button>
+        </div>
+      </div>
+    </header>
+  );
+};
