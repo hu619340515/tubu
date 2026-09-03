@@ -9,15 +9,20 @@ import {
   ChevronDown,
   ListTodo,
   WifiOff,
+  GitFork,
 } from 'lucide-react';
 import { User, HikingList } from '../types';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 
+export type ActiveViewMode = 'checklist' | 'mindmap';
+
 interface NavbarProps {
   currentUser: User;
   lists: HikingList[];
   activeListId: string;
+  activeView: ActiveViewMode;
+  onSelectView: (view: ActiveViewMode) => void;
   onSelectList: (id: string) => void;
   onOpenNewList: () => void;
   onOpenAuth: () => void;
@@ -28,6 +33,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentUser,
   lists,
   activeListId,
+  activeView,
+  onSelectView,
   onSelectList,
   onOpenNewList,
   onOpenAuth,
@@ -64,31 +71,62 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* Center: Active Checklist Selector (on tablets & desktop) */}
-        <div className="hidden md:flex items-center gap-2 max-w-sm">
-          <div className="relative flex-1">
-            <select
-              value={activeListId}
-              onChange={(e) => onSelectList(e.target.value)}
-              className="w-full pl-3 pr-8 py-1.5 bg-white border border-[#D9D4C7] hover:border-[#5A5A40] text-xs font-medium text-[#2C2C2C] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#5A5A40] appearance-none cursor-pointer truncate shadow-2xs"
+        {/* Center: View Switcher (Checklist vs Mind Map) & Trip Selector */}
+        <div className="flex items-center gap-2">
+          {/* View Mode Toggle (行程导图在前，装备清单在后) */}
+          <div className="flex items-center bg-white/80 border border-[#D9D4C7] p-0.5 rounded-xl shadow-2xs">
+            <button
+              type="button"
+              onClick={() => onSelectView('mindmap')}
+              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1 text-xs font-bold rounded-lg transition ${
+                activeView === 'mindmap'
+                  ? 'bg-[#5A5A40] text-white shadow-2xs'
+                  : 'text-[#7A7465] hover:text-[#2C2C2C]'
+              }`}
             >
-              {lists.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.title} ({l.destination})
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="w-3.5 h-3.5 text-[#7A7465] absolute right-2.5 top-2.5 pointer-events-none" />
+              <GitFork className="w-3.5 h-3.5" />
+              <span>行程导图</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onSelectView('checklist')}
+              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1 text-xs font-bold rounded-lg transition ${
+                activeView === 'checklist'
+                  ? 'bg-[#5A5A40] text-white shadow-2xs'
+                  : 'text-[#7A7465] hover:text-[#2C2C2C]'
+              }`}
+            >
+              <ListTodo className="w-3.5 h-3.5" />
+              <span>装备清单</span>
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={onOpenNewList}
-            className="p-1.5 bg-[#5A5A40] text-white hover:bg-[#484833] rounded-xl transition shadow-2xs"
-            title="新建清单"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
+          {/* Active Trip Selector (on tablets & desktop) */}
+          <div className="hidden md:flex items-center gap-1.5">
+            <div className="relative w-44">
+              <select
+                value={activeListId}
+                onChange={(e) => onSelectList(e.target.value)}
+                className="w-full pl-2.5 pr-7 py-1 bg-white border border-[#D9D4C7] hover:border-[#5A5A40] text-xs font-medium text-[#2C2C2C] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#5A5A40] appearance-none cursor-pointer truncate shadow-2xs"
+              >
+                {lists.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.title}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-3 h-3 text-[#7A7465] absolute right-2 top-2.5 pointer-events-none" />
+            </div>
+
+            <button
+              type="button"
+              onClick={onOpenNewList}
+              className="p-1 bg-[#5A5A40] text-white hover:bg-[#484833] rounded-xl transition shadow-2xs"
+              title="新建行程清单"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
 
         {/* Right Actions */}

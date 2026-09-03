@@ -20,6 +20,7 @@ export interface MountainPreset {
 }
 
 export const POPULAR_MOUNTAINS: MountainPreset[] = [
+  { name: '四川·格聂神山大环线', region: '甘孜理塘', lat: 29.81, lng: 99.63, elevation: 4200, recommendedSeason: '9月-10月金秋/6月花季' },
   { name: '江西·武功山', region: '萍乡/吉安', lat: 27.46, lng: 114.18, elevation: 1918, recommendedSeason: '5月-10月高山草甸' },
   { name: '云南·梅里雪山/雨崩', region: '迪庆德钦', lat: 28.38, lng: 98.86, elevation: 3200, recommendedSeason: '10月-次年5月观日照金山' },
   { name: '四川·四姑娘山大峰', region: '阿坝小金', lat: 31.11, lng: 102.90, elevation: 5025, recommendedSeason: '6月-11月初级雪山' },
@@ -33,6 +34,28 @@ export const POPULAR_MOUNTAINS: MountainPreset[] = [
 ];
 
 export const TEMPLATE_LISTS: Omit<HikingList, 'id' | 'userId' | 'createdAt' | 'updatedAt'>[] = [
+  {
+    title: '2026 格聂四日高海拔徒步全案',
+    description: '下则通至惹迪村四日经典合规线，平均海拔4000m+，抗寒防高反与全套装备。',
+    destination: '四川·格聂神山大环线',
+    destinationCoords: { lat: 29.81, lng: 99.63 },
+    trailType: 'high_altitude',
+    durationDays: 4,
+    customCategories: [...DEFAULT_CATEGORIES],
+    items: [
+      { id: 'gn-1', name: '舒适温标-10℃高蓬松羽绒睡袋', categoryId: 'cat-shelter', weightGrams: 1150, quantity: 1, packed: false, isEssential: true, notes: '高海拔夜间零下，保暖核心' },
+      { id: 'gn-2', name: '高R值防潮充气垫 (R值≥4.5)', categoryId: 'cat-shelter', weightGrams: 520, quantity: 1, packed: false, isEssential: true },
+      { id: 'gn-3', name: '高抗风双人高山四季帐', categoryId: 'cat-shelter', weightGrams: 1950, quantity: 1, packed: false, isEssential: true, notes: '配加长防风地钉' },
+      { id: 'gn-4', name: '三层暴雨级GTX硬壳冲锋衣裤', categoryId: 'cat-clothing', weightGrams: 680, quantity: 1, packed: false, isEssential: true },
+      { id: 'gn-5', name: '高蓬松加厚保暖羽绒服 (充绒200g+)', categoryId: 'cat-clothing', weightGrams: 580, quantity: 1, packed: false, isEssential: true },
+      { id: 'gn-6', name: '重装中高帮防水徒步鞋', categoryId: 'cat-clothing', weightGrams: 1350, quantity: 1, packed: true, isEssential: true, packLocation: 'worn' },
+      { id: 'gn-7', name: '高原防高反药盒 (乙酰唑胺/布洛芬/散利痛)', categoryId: 'cat-safety', weightGrams: 150, quantity: 1, packed: false, isEssential: true },
+      { id: 'gn-8', name: '分体式高山抗风气炉 & 挡风板', categoryId: 'cat-food', weightGrams: 280, quantity: 1, packed: false, isEssential: true },
+      { id: 'gn-9', name: '重载双登山杖 (外锁碳纤维/铝合金)', categoryId: 'cat-safety', weightGrams: 460, quantity: 1, packed: true, isEssential: true, packLocation: 'worn' },
+      { id: 'gn-10', name: '双离线轨迹手机 + 3C移动电源', categoryId: 'cat-electronic', weightGrams: 560, quantity: 1, packed: false, isEssential: true, notes: '两步路离线等高线卫星图已就绪' },
+      { id: 'gn-11', name: 'UV400偏光防雪盲太阳镜 & 高倍防晒霜', categoryId: 'cat-hygiene', weightGrams: 120, quantity: 1, packed: false, isEssential: true },
+    ],
+  },
   {
     title: '武功山两日重装露营清单',
     description: '经典的草甸云海重装徒步路线，包含帐篷、炊具及保暖层。',

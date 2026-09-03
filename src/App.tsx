@@ -20,7 +20,7 @@ import {
 import { User, HikingList, GearItem, Category, TrailType } from './types';
 import { storageService } from './services/storageService';
 import { shareService } from './services/shareService';
-import { Navbar } from './components/Navbar';
+import { Navbar, ActiveViewMode } from './components/Navbar';
 import { ListHeader } from './components/ListHeader';
 import { CategorySection } from './components/CategorySection';
 import { WeatherModal } from './components/WeatherModal';
@@ -30,10 +30,15 @@ import { WeightStatsModal } from './components/WeightStatsModal';
 import { NewListModal } from './components/NewListModal';
 import { AuthModal } from './components/AuthModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
+import { MindMapCanvas } from './components/mindmap/MindMapCanvas';
+import { GitFork } from 'lucide-react';
 
 export default function App() {
   // 1. User Account State
   const [currentUser, setCurrentUser] = useState<User>(() => storageService.getActiveUser());
+
+  // 1.1 Active View Mode ('mindmap' | 'checklist')
+  const [activeView, setActiveView] = useState<ActiveViewMode>('mindmap');
 
   // 2. User's Personal Lists
   const [lists, setLists] = useState<HikingList[]>(() =>
@@ -398,6 +403,8 @@ export default function App() {
         currentUser={currentUser}
         lists={lists}
         activeListId={activeListId}
+        activeView={activeView}
+        onSelectView={setActiveView}
         onSelectList={setActiveListId}
         onOpenNewList={() => setIsNewListOpen(true)}
         onOpenAuth={() => setIsAuthOpen(true)}
@@ -443,8 +450,42 @@ export default function App() {
       {/* 3. Main Content Container */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 flex-1 w-full space-y-6">
         {activeList ? (
-          <>
-            {/* List Header & Progress Dashboard */}
+          activeView === 'mindmap' ? (
+            /* Mind Map View (Horizontal Timeline + Vertical Daily Flow) */
+            <div className="bg-white border border-[#D9D4C7] rounded-3xl overflow-hidden shadow-xs">
+              <div className="px-5 py-3.5 bg-[#FAF8F5] border-b border-[#D9D4C7] flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="p-1.5 bg-[#5A5A40] text-white rounded-xl shadow-2xs">
+                    <GitFork className="w-4 h-4" />
+                  </span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-sm sm:text-base font-bold text-[#2C2C2C]">
+                        {activeList.title} · 行程规划思维导图
+                      </h2>
+                      {activeList.durationDays && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 bg-[#EAE7DF] text-[#5A5A40] rounded-full">
+                          {activeList.durationDays} 天行程
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-[#7A7465]">
+                      横向日期线性推进 · 当日事项纵向串联 · 支持卡片随意拖拽、4向锚点自由拉线、右键新建日程与当天行程
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <MindMapCanvas
+                listId={activeList.id}
+                listTitle={activeList.title}
+                destination={activeList.destination}
+              />
+            </div>
+          ) : (
+            /* Checklist View */
+            <>
+              {/* List Header & Progress Dashboard */}
             <ListHeader
               list={activeList}
               onOpenWeather={() => setIsWeatherOpen(true)}
@@ -560,7 +601,8 @@ export default function App() {
               </div>
             </div>
           </>
-        ) : (
+        )
+      ) : (
           /* Empty state if user has no lists */
           <div className="p-16 text-center bg-white rounded-3xl border border-[#E5E1D8] shadow-sm max-w-lg mx-auto my-12 space-y-4">
             <div className="w-14 h-14 rounded-2xl bg-[#F0EEE8] text-[#5A5A40] flex items-center justify-center mx-auto">
