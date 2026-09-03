@@ -32,12 +32,12 @@ export const weatherService = {
     return WEATHER_CODE_MAP[code] || { text: '多云', icon: 'Cloud' };
   },
 
-  async fetchWeather(lat: number, lng: number, locationName: string, explicitElevation?: number): Promise<WeatherData> {
+  async fetchWeather(lat: number, lng: number, locationName: string): Promise<WeatherData> {
     const cacheKey = `hike_weather_${lat.toFixed(2)}_${lng.toFixed(2)}`;
 
     try {
-      const elevationParam = explicitElevation !== undefined ? `&elevation=${explicitElevation}` : '';
-      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}${elevationParam}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,precipitation&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max,uv_index_max&timezone=auto`;
+      // 纯净地表气温请求：Open-Meteo 具备 90m DEM 地貌高程模型，输出的 temperature_2m 即为地表 2m 真实气温，无需任何外部人工折算
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,precipitation&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max,uv_index_max&timezone=auto`;
 
       const response = await fetch(url);
       if (!response.ok) {
@@ -69,7 +69,7 @@ export const weatherService = {
       const currentWind = Math.round(data.current?.wind_speed_10m ?? 12);
       const currentRain = Math.round(data.daily?.precipitation_probability_max?.[0] ?? 0);
       const currentUv = Math.round(data.daily?.uv_index_max?.[0] ?? 6);
-      const elevation = Math.round(data.elevation ?? explicitElevation ?? 0);
+      const elevation = Math.round(data.elevation ?? 0);
 
       // Generate smart hiking packing advice
       const advice: string[] = [];
@@ -128,8 +128,8 @@ export const weatherService = {
         // ignore
       }
 
-      // Dynamic realistic synthetic fallback based on altitude (lapse rate: ~6.5°C per 1000m)
-      const effectiveElevation = explicitElevation ?? (locationName.includes('格聂') ? 4200 : 20);
+      // Dynamic realistic synthetic fallback
+      const effectiveElevation = locationName.includes('格聂') ? 4200 : locationName.includes('理塘') ? 3960 : 20;
       const isHighAltitude = effectiveElevation >= 3000;
       const baseMax = isHighAltitude ? Math.max(5, Math.round(25 - (effectiveElevation / 1000) * 3.5)) : 28;
       const baseMin = isHighAltitude ? Math.max(-5, Math.round(14 - (effectiveElevation / 1000) * 4.2)) : 20;

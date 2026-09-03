@@ -52,22 +52,18 @@ export const WeatherModal: React.FC<WeatherModalProps> = ({
         m.name.includes(destination)
     );
 
-    const targetElevation = matchedPreset?.elevation || (destination.includes('格聂') ? 4200 : undefined);
     const targetCoords = initialCoords || (matchedPreset ? { lat: matchedPreset.lat, lng: matchedPreset.lng } : { lat: 29.81, lng: 99.63 });
     setCoords(targetCoords);
     setCurrentDestination(matchedPreset ? matchedPreset.name : destination || '四川·格聂神山大环线');
 
-    loadWeather(targetCoords.lat, targetCoords.lng, matchedPreset ? matchedPreset.name : destination || '格聂神山', targetElevation);
+    loadWeather(targetCoords.lat, targetCoords.lng, matchedPreset ? matchedPreset.name : destination || '格聂神山');
   }, [isOpen, destination, initialCoords]);
 
-  const loadWeather = async (lat: number, lng: number, name: string, elevation?: number) => {
+  const loadWeather = async (lat: number, lng: number, name: string) => {
     setIsLoading(true);
     try {
-      const matched = POPULAR_MOUNTAINS.find(
-        (m) => name.includes(m.name.split('·')[1] || m.name) || m.name.includes(name)
-      );
-      const targetElevation = elevation !== undefined ? elevation : (matched?.elevation || (name.includes('格聂') ? 4200 : undefined));
-      const data = await weatherService.fetchWeather(lat, lng, name, targetElevation);
+      // 纯粹直接读取该经纬度地面气象观测与地貌实况，绝不做任何人工多余的高程递减折算
+      const data = await weatherService.fetchWeather(lat, lng, name);
       setWeather(data);
     } catch (e) {
       console.error('Failed to load weather:', e);
@@ -79,7 +75,7 @@ export const WeatherModal: React.FC<WeatherModalProps> = ({
   const handleSelectPreset = (preset: MountainPreset) => {
     setCoords({ lat: preset.lat, lng: preset.lng });
     setCurrentDestination(preset.name);
-    loadWeather(preset.lat, preset.lng, preset.name, preset.elevation);
+    loadWeather(preset.lat, preset.lng, preset.name);
     setSearchResults([]);
     setSearchQuery('');
   };
@@ -97,8 +93,7 @@ export const WeatherModal: React.FC<WeatherModalProps> = ({
     const fullName = `${res.name} (${res.country}${res.admin1 ? '·' + res.admin1 : ''})`;
     setCoords({ lat: res.lat, lng: res.lng });
     setCurrentDestination(res.name);
-    // Use the actual elevation from search result (or undefined so Open-Meteo DEM computes true elevation)
-    loadWeather(res.lat, res.lng, fullName, res.elevation);
+    loadWeather(res.lat, res.lng, fullName);
     setSearchResults([]);
     setSearchQuery('');
   };
@@ -124,7 +119,7 @@ export const WeatherModal: React.FC<WeatherModalProps> = ({
             <div>
               <h2 className="text-base font-serif font-bold tracking-tight">徒步目的地天气预报与装备指南</h2>
               <p className="text-xs text-[#DCD8CD]">
-                实时高精度气象数据 · 气压海拔修正 · 智能装备提醒
+                地面观测站与高精数值模型 · 真实地表气象 · 智能装备提醒
               </p>
             </div>
           </div>
@@ -261,17 +256,13 @@ export const WeatherModal: React.FC<WeatherModalProps> = ({
                 </div>
               </div>
 
-              {/* Data Source & High-altitude Lapse Rate note */}
+              {/* Data Source & Surface Elevation Note */}
               <div className="flex flex-wrap items-center justify-between text-[11px] text-[#7A7465] px-1 gap-1">
                 <div className="flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#5A5A40]" />
-                  <span>数据源：<strong>Open-Meteo 高清数值气象预报</strong>（集成 ECMWF IFS 与 CMA 中国气象局模式）</span>
+                  <span>数据源：<strong>Open-Meteo 高清地表气象</strong>（集成 ECMWF IFS 与 CMA 中国气象局模式）</span>
                 </div>
-                <span>
-                  {weather.elevation <= 100
-                    ? `真实平原高程 (~${weather.elevation}m)`
-                    : `已按山野高程 (~${weather.elevation}m) 进行气温垂直递减率校准`}
-                </span>
+                <span>当前站点真实地表海拔：~{weather.elevation}m</span>
               </div>
 
               {/* Smart Weather Gear Recommendations */}
