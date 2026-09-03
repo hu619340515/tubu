@@ -762,11 +762,12 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
     return { renderedNodes: nodes, renderedEdges: edgeList, nodeMap: nMap };
   }, [root, autoLayoutPositions, dragOffsets, edges]);
 
-  // Viewport Fit View
+  // Viewport Fit View (Adaptive for all resolutions: 4K, 2K, 1080p, Laptops, Mobile)
   const handleFitView = useCallback(() => {
     if (!containerRef.current || renderedNodes.length === 0) return;
     const containerW = containerRef.current.clientWidth;
     const containerH = containerRef.current.clientHeight;
+    if (containerW <= 0 || containerH <= 0) return;
 
     let minX = Infinity,
       maxX = -Infinity,
@@ -780,12 +781,16 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       if (n.y + n.height > maxY) maxY = n.y + n.height;
     }
 
-    const bboxW = maxX - minX + 160;
-    const bboxH = maxY - minY + 160;
+    const paddingX = Math.max(60, containerW * 0.04);
+    const paddingY = Math.max(70, containerH * 0.06);
+    const bboxW = maxX - minX + paddingX * 2;
+    const bboxH = maxY - minY + paddingY * 2;
 
     const scaleX = containerW / bboxW;
     const scaleY = containerH / bboxH;
-    const newZoom = Math.max(0.35, Math.min(1.15, Math.min(scaleX, scaleY)));
+    let newZoom = Math.min(scaleX, scaleY);
+    // Comfortably clamp zoom: min 0.35 on super complex maps, max 1.25 on high-res displays
+    newZoom = Math.max(0.35, Math.min(1.25, newZoom));
 
     const newPanX = (containerW - (maxX + minX) * newZoom) / 2;
     const newPanY = (containerH - (maxY + minY) * newZoom) / 2;
@@ -793,6 +798,23 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
     setZoom(+newZoom.toFixed(2));
     setPan({ x: Math.round(newPanX), y: Math.round(newPanY) });
   }, [renderedNodes]);
+
+  // Auto-adapt when screen resolution or browser window size changes
+  useEffect(() => {
+    if (!containerRef.current) return;
+    let timer: NodeJS.Timeout;
+    const ro = new ResizeObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        handleFitView();
+      }, 80);
+    });
+    ro.observe(containerRef.current);
+    return () => {
+      clearTimeout(timer);
+      ro.disconnect();
+    };
+  }, [handleFitView]);
 
   useEffect(() => {
     const timer = setTimeout(() => handleFitView(), 120);
@@ -1596,10 +1618,10 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       onMouseMove={handleGlobalMouseMove}
       onMouseUp={handleGlobalMouseUp}
       onContextMenu={handleCanvasContextMenu}
-      className="flex flex-col h-[calc(100vh-8.5rem)] relative overflow-hidden select-none bg-[#FAF8F5]"
+      className="flex flex-col w-full h-full min-h-0 relative overflow-hidden select-none bg-[#FAF8F5]"
     >
       {/* Top Floating Control Bar */}
-      <div className="absolute top-4 left-4 right-4 z-20 pointer-events-auto">
+      <div className="absolute top-2.5 sm:top-4 left-2.5 sm:left-4 right-2.5 sm:right-4 z-20 pointer-events-auto">
         <MindMapToolbar
           zoom={zoom}
           layoutMode={layoutMode}

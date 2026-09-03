@@ -61,11 +61,11 @@ export const MindMapToolbar: React.FC<MindMapToolbarProps> = ({
   const [showPresetsMenu, setShowPresetsMenu] = useState(false);
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 p-2 bg-white/95 backdrop-blur-md border border-[#D9D4C7] rounded-2xl shadow-sm text-[#2C2C2C]">
+    <div className="flex items-center justify-between gap-1.5 sm:gap-2 p-1.5 sm:p-2 bg-white/95 backdrop-blur-md border border-[#D9D4C7] rounded-xl sm:rounded-2xl shadow-sm text-[#2C2C2C] max-w-full overflow-x-auto">
       {/* Left: Layout Switcher & Presets */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1 sm:gap-2 shrink-0">
         {/* Layout Switcher: Timeline Flow vs Classic Tree */}
-        <div className="flex items-center bg-[#FAF8F5] border border-[#D9D4C7] p-0.5 rounded-xl shadow-2xs">
+        <div className="flex items-center bg-[#FAF8F5] border border-[#D9D4C7] p-0.5 rounded-xl shadow-2xs shrink-0">
           <button
             type="button"
             onClick={() => onToggleLayoutMode('timeline-flow')}
@@ -183,7 +183,7 @@ export const MindMapToolbar: React.FC<MindMapToolbarProps> = ({
       </div>
 
       {/* Right: Zoom & View Controls */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
         {/* Collapse / Expand all */}
         <button
           type="button"

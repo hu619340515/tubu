@@ -397,7 +397,11 @@ export default function App() {
   }, [activeList, searchQuery, filterMode]);
 
   return (
-    <div className="min-h-screen bg-[#F5F5F0] text-[#2C2C2C] flex flex-col font-sans selection:bg-[#5A5A40] selection:text-white pb-16">
+    <div
+      className={`min-h-screen bg-[#F5F5F0] text-[#2C2C2C] flex flex-col font-sans selection:bg-[#5A5A40] selection:text-white ${
+        activeView === 'mindmap' ? 'h-screen overflow-hidden' : 'pb-16'
+      }`}
+    >
       {/* 1. Global Navigation Bar */}
       <Navbar
         currentUser={currentUser}
@@ -414,7 +418,7 @@ export default function App() {
       {/* 2. Shared Link Imported Banner (if opened from social share URL) */}
       {sharedBanner && (
         <div className="bg-[#5A5A40] text-white px-4 py-3 border-b border-[#484833] shadow-md">
-          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="w-full px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 text-xs sm:text-sm">
               <span className="p-1 bg-[#484833] rounded-lg text-white">
                 <Share2 className="w-4 h-4" />
@@ -447,40 +451,48 @@ export default function App() {
         </div>
       )}
 
-      {/* 3. Main Content Container */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 flex-1 w-full space-y-6">
+      {/* 3. Main Content Container (Adaptive across all screen resolutions) */}
+      <main
+        className={
+          activeView === 'mindmap'
+            ? 'w-full px-2 sm:px-4 lg:px-6 pt-2 pb-2 flex-1 flex flex-col min-h-0 overflow-hidden'
+            : 'max-w-7xl mx-auto px-4 sm:px-6 pt-6 flex-1 w-full space-y-6'
+        }
+      >
         {activeList ? (
           activeView === 'mindmap' ? (
-            /* Mind Map View (Horizontal Timeline + Vertical Daily Flow) */
-            <div className="bg-white border border-[#D9D4C7] rounded-3xl overflow-hidden shadow-xs">
-              <div className="px-5 py-3.5 bg-[#FAF8F5] border-b border-[#D9D4C7] flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <span className="p-1.5 bg-[#5A5A40] text-white rounded-xl shadow-2xs">
-                    <GitFork className="w-4 h-4" />
+            /* Mind Map View (Adaptive Full-Width and Full-Height Canvas for Any Screen Resolution) */
+            <div className="bg-white border border-[#D9D4C7] rounded-2xl sm:rounded-3xl overflow-hidden shadow-xs flex-1 flex flex-col min-h-0 h-full">
+              <div className="px-3.5 sm:px-5 py-2 sm:py-2.5 bg-[#FAF8F5] border-b border-[#D9D4C7] flex items-center justify-between gap-2 shrink-0">
+                <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                  <span className="p-1 sm:p-1.5 bg-[#5A5A40] text-white rounded-xl shadow-2xs shrink-0">
+                    <GitFork className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </span>
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <h2 className="text-sm sm:text-base font-bold text-[#2C2C2C]">
+                      <h2 className="text-xs sm:text-sm md:text-base font-bold text-[#2C2C2C] truncate">
                         {activeList.title} · 行程规划思维导图
                       </h2>
                       {activeList.durationDays && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 bg-[#EAE7DF] text-[#5A5A40] rounded-full">
+                        <span className="text-[10px] font-bold px-1.5 sm:px-2 py-0.5 bg-[#EAE7DF] text-[#5A5A40] rounded-full shrink-0">
                           {activeList.durationDays} 天行程
                         </span>
                       )}
                     </div>
-                    <p className="text-[11px] text-[#7A7465]">
-                      横向日期线性推进 · 当日事项纵向串联 · 支持卡片随意拖拽、4向锚点自由拉线、右键新建日程与当天行程
+                    <p className="text-[10px] sm:text-[11px] text-[#7A7465] hidden md:block">
+                      横向日期线性推进 · 当日事项纵向串联 · 支持卡片自由拖拽平移、框选多选、拉线连接与防重叠自动整理
                     </p>
                   </div>
                 </div>
               </div>
 
-              <MindMapCanvas
-                listId={activeList.id}
-                listTitle={activeList.title}
-                destination={activeList.destination}
-              />
+              <div className="flex-1 w-full h-full min-h-0 relative">
+                <MindMapCanvas
+                  listId={activeList.id}
+                  listTitle={activeList.title}
+                  destination={activeList.destination}
+                />
+              </div>
             </div>
           ) : (
             /* Checklist View */
