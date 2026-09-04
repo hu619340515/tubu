@@ -35,6 +35,7 @@ import { mindMapStorageService } from '../../services/mindMapStorageService';
 import { MindMapToolbar } from './MindMapToolbar';
 import { NodeEditModal } from './NodeEditModal';
 import { ContextMenu } from './ContextMenu';
+import { RouteMapPanel } from '../map/RouteMapPanel';
 
 interface MindMapCanvasProps {
   listId: string;
@@ -853,6 +854,75 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
     setZoom(+newZoom.toFixed(2));
     setPan({ x: Math.round(newPanX), y: Math.round(newPanY) });
   }, [renderedNodes]);
+
+  // Split-screen Route Map state (Left 40% Map, Right 60% Mind Map)
+  const [isMapOpen, setIsMapOpen] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem(`hike_mindmap_mapopen_${listId}`);
+      if (saved !== null) return saved === 'true';
+    } catch (e) {}
+    return typeof window !== 'undefined' && window.innerWidth >= 1024;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`hike_mindmap_mapopen_${listId}`, String(isMapOpen));
+    } catch (e) {}
+  }, [isMapOpen, listId]);
+
+  const toggleMap = useCallback(() => {
+    setIsMapOpen((prev) => {
+      const next = !prev;
+      setTimeout(() => handleFitView(), 200);
+      return next;
+    });
+  }, [handleFitView]);
+
+  const [mapFocusNodeTitle, setMapFocusNodeTitle] = useState<string | null>(null);
+
+  const handleFocusNodeFromMap = useCallback(
+    (title: string) => {
+      const q = title.replace(/[D\d+·\s]/g, '').trim();
+      let matchedNode: MindMapNode | null = null;
+
+      const walk = (n: MindMapNode) => {
+        if (matchedNode) return;
+        if (
+          n.title.includes(title) ||
+          title.includes(n.title) ||
+          (q && n.title.includes(q)) ||
+          (q && n.description?.includes(q))
+        ) {
+          matchedNode = n;
+          return;
+        }
+        n.children?.forEach(walk);
+      };
+      walk(root);
+
+      if (matchedNode) {
+        setSelectedNodeIds([matchedNode.id]);
+        const pos = nodePositions[matchedNode.id];
+        if (pos && containerRef.current) {
+          const rect = containerRef.current.getBoundingClientRect();
+          const targetPanX = rect.width / 2 - (pos.x + pos.width / 2) * zoom;
+          const targetPanY = rect.height / 2 - (pos.y + pos.height / 2) * zoom;
+          setPan({ x: Math.round(targetPanX), y: Math.round(targetPanY) });
+        }
+      }
+    },
+    [root, nodePositions, zoom]
+  );
+
+  // Sync selected node to route map
+  useEffect(() => {
+    if (selectedNodeIds.length === 1) {
+      const node = renderedNodes.find((n) => n.data.id === selectedNodeIds[0]);
+      if (node) {
+        setMapFocusNodeTitle(node.data.title);
+      }
+    }
+  }, [selectedNodeIds, renderedNodes]);
 
   // Auto-adapt when screen resolution or browser window size changes
   useEffect(() => {
@@ -1673,19 +1743,34 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   };
 
   return (
-    <div
-      onMouseMove={handleGlobalMouseMove}
-      onMouseUp={handleGlobalMouseUp}
-      onContextMenu={handleCanvasContextMenu}
-      className="flex flex-col w-full h-full min-h-0 relative overflow-hidden select-none bg-[#FAF8F5]"
-    >
-      {/* Top Floating Control Bar */}
-      <div className="absolute top-2.5 sm:top-4 left-2.5 sm:left-4 right-2.5 sm:right-4 z-20 pointer-events-auto">
-        <MindMapToolbar
-          zoom={zoom}
-          layoutMode={layoutMode}
-          saveStatus={saveStatus}
-          onToggleLayoutMode={() => setLayoutMode('timeline-flow')}
+    <div className="flex flex-col md:flex-row w-full h-full min-h-0 relative overflow-hidden select-none bg-[#FAF8F5]">
+      {/* Left: Two-Step Outdoor Route Map Panel (40% width) */}
+      {isMapOpen && (
+        <div className="w-full md:w-[40%] xl:w-[40%] h-[42vh] md:h-full shrink-0 relative z-10 border-b md:border-b-0 md:border-r border-[#D9D4C7]">
+          <RouteMapPanel
+            onClose={toggleMap}
+            onFocusNodeByTitle={handleFocusNodeFromMap}
+            highlightedNodeTitle={mapFocusNodeTitle}
+          />
+        </div>
+      )}
+
+      {/* Right: Mind Map Canvas Viewport (60% width when map open, 100% when closed) */}
+      <div
+        onMouseMove={handleGlobalMouseMove}
+        onMouseUp={handleGlobalMouseUp}
+        onContextMenu={handleCanvasContextMenu}
+        className="flex-1 w-full h-full min-w-0 flex flex-col relative overflow-hidden select-none bg-[#FAF8F5]"
+      >
+        {/* Top Floating Control Bar */}
+        <div className="absolute top-2.5 sm:top-4 left-2.5 sm:left-4 right-2.5 sm:right-4 z-20 pointer-events-auto">
+          <MindMapToolbar
+            isMapOpen={isMapOpen}
+            onToggleMap={toggleMap}
+            zoom={zoom}
+            layoutMode={layoutMode}
+            saveStatus={saveStatus}
+            onToggleLayoutMode={() => setLayoutMode('timeline-flow')}
           canUndo={historyIndex > 0}
           canRedo={historyIndex < history.length - 1}
           onUndo={handleUndo}
@@ -2161,6 +2246,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
             当前视图：<strong>思维导图</strong>
           </div>
         </div>
+      </div>
       </div>
 
       {/* Context Menu (Both Node & Empty Canvas) */}

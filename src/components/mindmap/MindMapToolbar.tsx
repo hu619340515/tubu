@@ -12,6 +12,7 @@ import {
   Undo2,
   Redo2,
   GitFork,
+  Navigation,
 } from 'lucide-react';
 import { MindMapPreset, MindMapLayoutMode } from '../../types/mindmap';
 import { MindMapPresetsModal } from './MindMapPresetsModal';
@@ -36,6 +37,8 @@ interface MindMapToolbarProps {
   presets: MindMapPreset[];
   totalNodes: number;
   saveStatus?: 'saved' | 'saving';
+  isMapOpen?: boolean;
+  onToggleMap?: () => void;
 }
 
 export const MindMapToolbar: React.FC<MindMapToolbarProps> = ({
@@ -58,6 +61,8 @@ export const MindMapToolbar: React.FC<MindMapToolbarProps> = ({
   onSelectPreset,
   presets,
   totalNodes,
+  isMapOpen = false,
+  onToggleMap,
 }) => {
   const [isPresetsModalOpen, setIsPresetsModalOpen] = useState(false);
 
@@ -126,6 +131,24 @@ export const MindMapToolbar: React.FC<MindMapToolbarProps> = ({
           presets={presets}
           onSelectPreset={onSelectPreset}
         />
+
+        {/* Toggle Route Map Button */}
+        {onToggleMap && (
+          <button
+            type="button"
+            onClick={onToggleMap}
+            className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-xl text-xs font-bold transition cursor-pointer ${
+              isMapOpen
+                ? 'bg-[#5A5A40] text-white border-[#5A5A40] shadow-xs'
+                : 'bg-[#FAF8F5] hover:bg-[#EAE7DF] border-[#D9D4C7] text-[#5A5A40]'
+            }`}
+            title={isMapOpen ? '收起路线地图' : '展开两步路轨迹分屏地图'}
+          >
+            <Navigation className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">路线地图</span>
+            {isMapOpen && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+          </button>
+        )}
 
         {/* Node stats badge */}
         <span className="hidden md:inline-flex items-center gap-1 px-2.5 py-1 bg-[#FAF8F5] border border-[#D9D4C7] text-[11px] font-medium text-[#7A7465] rounded-xl">
