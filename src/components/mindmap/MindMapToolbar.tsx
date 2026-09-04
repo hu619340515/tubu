@@ -8,13 +8,13 @@ import {
   Download,
   RotateCcw,
   Sparkles,
-  ChevronDown,
   Layers,
   Undo2,
   Redo2,
   GitFork,
 } from 'lucide-react';
 import { MindMapPreset, MindMapLayoutMode } from '../../types/mindmap';
+import { MindMapPresetsModal } from './MindMapPresetsModal';
 
 interface MindMapToolbarProps {
   zoom: number;
@@ -59,7 +59,7 @@ export const MindMapToolbar: React.FC<MindMapToolbarProps> = ({
   presets,
   totalNodes,
 }) => {
-  const [showPresetsMenu, setShowPresetsMenu] = useState(false);
+  const [isPresetsModalOpen, setIsPresetsModalOpen] = useState(false);
 
   return (
     <div className="flex items-center justify-between gap-1.5 sm:gap-2 p-1.5 sm:p-2 bg-white/95 backdrop-blur-md border border-[#D9D4C7] rounded-xl sm:rounded-2xl shadow-sm text-[#2C2C2C] max-w-full overflow-x-auto">
@@ -108,56 +108,24 @@ export const MindMapToolbar: React.FC<MindMapToolbarProps> = ({
           </button>
         </div>
 
-        {/* Presets Selector Dropdown */}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setShowPresetsMenu(!showPresetsMenu)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FAF8F5] hover:bg-[#EAE7DF] border border-[#D9D4C7] text-xs font-semibold text-[#2C2C2C] rounded-xl transition"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-[#D95D39]" />
-            <span className="hidden sm:inline">模版预置</span>
-            <ChevronDown className="w-3 h-3 text-[#7A7465]" />
-          </button>
+        {/* Presets Modal Trigger */}
+        <button
+          type="button"
+          onClick={() => setIsPresetsModalOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FAF8F5] hover:bg-[#EAE7DF] border border-[#D9D4C7] text-xs font-semibold text-[#2C2C2C] rounded-xl transition cursor-pointer"
+          title="打开行程导图模版库"
+        >
+          <Sparkles className="w-3.5 h-3.5 text-[#D95D39]" />
+          <span className="hidden sm:inline">模版预置</span>
+        </button>
 
-          {showPresetsMenu && (
-            <>
-              <div
-                className="fixed inset-0 z-20"
-                onClick={() => setShowPresetsMenu(false)}
-              />
-              <div className="absolute left-0 top-full mt-1.5 w-64 bg-white border border-[#D9D4C7] rounded-xl shadow-lg z-30 p-1.5 space-y-1 animate-in fade-in zoom-in-95 duration-100">
-                <div className="px-2 py-1 text-[11px] font-bold text-[#7A7465]">
-                  选择或重置行程导图
-                </div>
-                {presets.map((preset) => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => {
-                      if (
-                        confirm(
-                          `确定要加载模版「${preset.title}」吗？当前自定义导图将被覆盖。`
-                        )
-                      ) {
-                        onSelectPreset(preset.id);
-                        setShowPresetsMenu(false);
-                      }
-                    }}
-                    className="w-full text-left px-2.5 py-2 hover:bg-[#FAF8F5] rounded-lg transition group"
-                  >
-                    <div className="text-xs font-bold text-[#2C2C2C] group-hover:text-[#5A5A40]">
-                      {preset.title}
-                    </div>
-                    <div className="text-[10px] text-[#7A7465] truncate">
-                      {preset.description}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+        {/* Presets Selection Modal */}
+        <MindMapPresetsModal
+          isOpen={isPresetsModalOpen}
+          onClose={() => setIsPresetsModalOpen(false)}
+          presets={presets}
+          onSelectPreset={onSelectPreset}
+        />
 
         {/* Node stats badge */}
         <span className="hidden md:inline-flex items-center gap-1 px-2.5 py-1 bg-[#FAF8F5] border border-[#D9D4C7] text-[11px] font-medium text-[#7A7465] rounded-xl">

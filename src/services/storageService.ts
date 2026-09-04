@@ -19,17 +19,6 @@ const DEFAULT_USERS: (User & { passwordHash: string })[] = [
     isAdmin: true,
     createdAt: Date.now() - 60 * 24 * 3600 * 1000,
   },
-  {
-    id: 'user-rock',
-    username: '岩石 (老驴)',
-    email: 'rock@trailpack.cn',
-    passwordHash: '123456',
-    avatar: '🏔️',
-    experienceLevel: 'expert',
-    role: 'user',
-    isAdmin: false,
-    createdAt: Date.now() - 30 * 24 * 3600 * 1000,
-  },
 ];
 
 const DEFAULT_ANNOUNCEMENT: SiteAnnouncement = {
@@ -41,15 +30,21 @@ const DEFAULT_ANNOUNCEMENT: SiteAnnouncement = {
   updatedAt: Date.now(),
 };
 
-// Ensure data migration and user cleanup runs
+// Ensure data migration, Rock to Wangzai sync, and Rock removal
 function ensureDataMigrated(): void {
   if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
   try {
     const rawUsers = localStorage.getItem(USERS_KEY);
     let users: (User & { passwordHash: string })[] = rawUsers ? JSON.parse(rawUsers) : [];
 
-    // 1. Filter out deleted user "小鹿"
-    users = users.filter((u) => u.id !== 'user-deer' && u.email !== 'deer@trailpack.cn');
+    // 1. Filter out deleted users "小鹿" and "岩石"
+    users = users.filter(
+      (u) =>
+        u.id !== 'user-deer' &&
+        u.email !== 'deer@trailpack.cn' &&
+        u.id !== 'user-rock' &&
+        u.email !== 'rock@trailpack.cn'
+    );
 
     // 2. Ensure administrator "旺仔" exists with admin privileges and correct credentials
     const wangzaiIdx = users.findIndex((u) => u.email.toLowerCase() === '619340515@qq.com');
@@ -62,14 +57,9 @@ function ensureDataMigrated(): void {
       users[wangzaiIdx].passwordHash = '619340515';
     }
 
-    // 3. Ensure "岩石" exists as well
-    if (!users.some((u) => u.id === 'user-rock')) {
-      users.push(DEFAULT_USERS[1]);
-    }
-
     localStorage.setItem(USERS_KEY, JSON.stringify(users));
 
-    // 4. Migrate Rock's full list & mindmap data to Wangzai
+    // 3. Final synchronization of Rock's data to Wangzai before clearing Rock
     const wangzaiListsKey = LISTS_PREFIX + 'user-wangzai';
     const rockListsKey = LISTS_PREFIX + 'user-rock';
     const rawWangzaiLists = localStorage.getItem(wangzaiListsKey);
@@ -81,21 +71,8 @@ function ensureDataMigrated(): void {
         rockLists = JSON.parse(rawRockLists);
       } catch (e) {}
     }
-    if (!rockLists || rockLists.length === 0) {
-      rockLists = TEMPLATE_LISTS.map((tpl, idx) => ({
-        id: `list-user-rock-${idx + 1}`,
-        userId: 'user-rock',
-        ...tpl,
-        customCategories: tpl.customCategories || [...DEFAULT_CATEGORIES],
-        createdAt: Date.now() - idx * 86400000,
-        updatedAt: Date.now() - idx * 43200000,
-        isFavorite: idx === 0,
-      }));
-      localStorage.setItem(rockListsKey, JSON.stringify(rockLists));
-    }
 
-    const MIGRATION_FLAG = 'hike_migrated_rock_to_wangzai_v1';
-    if (!localStorage.getItem(MIGRATION_FLAG) || !rawWangzaiLists) {
+    if (rockLists && rockLists.length > 0) {
       const clonedLists: HikingList[] = rockLists.map((list, idx) => {
         const oldId = list.id;
         const newId = `list-user-wangzai-${idx + 1}`;
@@ -124,7 +101,29 @@ function ensureDataMigrated(): void {
       });
 
       localStorage.setItem(wangzaiListsKey, JSON.stringify(clonedLists));
-      localStorage.setItem(MIGRATION_FLAG, 'true');
+    } else if (!rawWangzaiLists) {
+      const wangzaiLists: HikingList[] = TEMPLATE_LISTS.map((tpl, idx) => ({
+        id: `list-user-wangzai-${idx + 1}`,
+        userId: 'user-wangzai',
+        ...tpl,
+        customCategories: tpl.customCategories || [...DEFAULT_CATEGORIES],
+        createdAt: Date.now() - idx * 86400000,
+        updatedAt: Date.now() - idx * 43200000,
+        isFavorite: idx === 0,
+      }));
+      localStorage.setItem(wangzaiListsKey, JSON.stringify(wangzaiLists));
+    }
+
+    // 4. Delete Rock's lists and clear active user session if it was Rock
+    localStorage.removeItem(rockListsKey);
+    const rawActive = localStorage.getItem(ACTIVE_USER_KEY);
+    if (rawActive) {
+      try {
+        const active = JSON.parse(rawActive);
+        if (active.id === 'user-rock' || active.email === 'rock@trailpack.cn') {
+          localStorage.removeItem(ACTIVE_USER_KEY);
+        }
+      } catch (e) {}
     }
   } catch (e) {
     console.error('Data migration failed:', e);
