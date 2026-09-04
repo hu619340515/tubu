@@ -28,6 +28,9 @@ export interface TrackWaypoint {
   description?: string;
   imageUrl?: string;
   type?: 'start' | 'end' | 'camp' | 'photo' | 'pass' | 'point';
+  time?: string;
+  distFromStartKm?: number;
+  distToEndKm?: number;
 }
 
 export interface ParsedTrack {

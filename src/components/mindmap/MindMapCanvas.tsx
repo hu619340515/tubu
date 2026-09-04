@@ -878,51 +878,6 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
     });
   }, [handleFitView]);
 
-  const [mapFocusNodeTitle, setMapFocusNodeTitle] = useState<string | null>(null);
-
-  const handleFocusNodeFromMap = useCallback(
-    (title: string) => {
-      const q = title.replace(/[D\d+·\s]/g, '').trim();
-      let matchedNode: MindMapNode | null = null;
-
-      const walk = (n: MindMapNode) => {
-        if (matchedNode) return;
-        if (
-          n.title.includes(title) ||
-          title.includes(n.title) ||
-          (q && n.title.includes(q)) ||
-          (q && n.description?.includes(q))
-        ) {
-          matchedNode = n;
-          return;
-        }
-        n.children?.forEach(walk);
-      };
-      walk(root);
-
-      if (matchedNode) {
-        setSelectedNodeIds([matchedNode.id]);
-        const targetNode = renderedNodes.find((n) => n.data.id === matchedNode!.id);
-        if (targetNode && containerRef.current) {
-          const rect = containerRef.current.getBoundingClientRect();
-          const targetPanX = rect.width / 2 - (targetNode.x + targetNode.width / 2) * zoom;
-          const targetPanY = rect.height / 2 - (targetNode.y + targetNode.height / 2) * zoom;
-          setPan({ x: Math.round(targetPanX), y: Math.round(targetPanY) });
-        }
-      }
-    },
-    [root, renderedNodes, zoom]
-  );
-
-  // Sync selected node to route map
-  useEffect(() => {
-    if (selectedNodeIds.length === 1) {
-      const node = renderedNodes.find((n) => n.data.id === selectedNodeIds[0]);
-      if (node) {
-        setMapFocusNodeTitle(node.data.title);
-      }
-    }
-  }, [selectedNodeIds, renderedNodes]);
 
   // Auto-adapt when screen resolution or browser window size changes
   useEffect(() => {
@@ -1747,11 +1702,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       {/* Left: Two-Step Outdoor Route Map Panel (40% width) */}
       {isMapOpen && (
         <div className="w-full md:w-[40%] xl:w-[40%] h-[42vh] md:h-full shrink-0 relative z-10 border-b md:border-b-0 md:border-r border-[#D9D4C7]">
-          <RouteMapPanel
-            onClose={toggleMap}
-            onFocusNodeByTitle={handleFocusNodeFromMap}
-            highlightedNodeTitle={mapFocusNodeTitle}
-          />
+          <RouteMapPanel onClose={toggleMap} />
         </div>
       )}
 

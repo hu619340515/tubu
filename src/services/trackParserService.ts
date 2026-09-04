@@ -15,6 +15,19 @@ function calcDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number):
   return R * c;
 }
 
+function formatTimestampToCst(dateOrString: string | number | Date): string {
+  try {
+    const d = typeof dateOrString === 'object' && dateOrString instanceof Date ? dateOrString : new Date(dateOrString);
+    if (isNaN(d.getTime())) return '';
+    // Convert to China Standard Time (UTC+8)
+    const bj = new Date(d.getTime() + (8 * 60 + d.getTimezoneOffset()) * 60000);
+    const p = (n: number) => n.toString().padStart(2, '0');
+    return `${bj.getFullYear()}-${p(bj.getMonth() + 1)}-${p(bj.getDate())} ${p(bj.getHours())}:${p(bj.getMinutes())}:${p(bj.getSeconds())}`;
+  } catch {
+    return '';
+  }
+}
+
 export const trackParserService = {
   /**
    * Parse KMZ file (zipped KML)
@@ -114,6 +127,22 @@ export const trackParserService = {
               imageUrl = imgMatch[1];
             }
 
+            // Extract photo timestamp
+            let photoTime: string | undefined;
+            const whenEl = pm.querySelector('TimeStamp > when');
+            if (whenEl && whenEl.textContent) {
+              photoTime = formatTimestampToCst(whenEl.textContent.trim());
+            }
+            if (!photoTime) {
+              const dataTime = pm.querySelector('Data[name="Time"] > value');
+              if (dataTime && dataTime.textContent) {
+                const ts = parseInt(dataTime.textContent.trim(), 10);
+                if (!isNaN(ts)) {
+                  photoTime = formatTimestampToCst(ts);
+                }
+              }
+            }
+
             // Categorize waypoint
             let type: TrackWaypoint['type'] = 'point';
             if (pmId === 'startPoint' || pmName.includes('起点')) type = 'start';
@@ -131,6 +160,7 @@ export const trackParserService = {
               description: pmDesc.replace(/<[^>]+>/g, ' ').trim(),
               imageUrl,
               type,
+              time: photoTime,
             });
           }
         }
@@ -258,6 +288,26 @@ export const trackParserService = {
 
     const totalDist = extDistanceKm > 0 ? extDistanceKm : +runningDistKm.toFixed(2);
 
+    // Calculate distance along track from start and to end for each waypoint
+    if (allPoints.length > 0) {
+      waypoints.forEach((wpt) => {
+        let minDistSq = Infinity;
+        let closestDist = 0;
+        for (let i = 0; i < allPoints.length; i++) {
+          const pt = allPoints[i];
+          const dLat = pt.lat - wpt.lat;
+          const dLng = (pt.lng - wpt.lng) * Math.cos(((wpt.lat + pt.lat) / 2) * (Math.PI / 180));
+          const distSq = dLat * dLat + dLng * dLng;
+          if (distSq < minDistSq) {
+            minDistSq = distSq;
+            closestDist = pt.distanceKm || 0;
+          }
+        }
+        wpt.distFromStartKm = +closestDist.toFixed(1);
+        wpt.distToEndKm = +Math.max(0, totalDist - closestDist).toFixed(1);
+      });
+    }
+
     return {
       id: `track-${Date.now()}`,
       title,
@@ -302,6 +352,9 @@ export const trackParserService = {
       const name = wEl.querySelector('name')?.textContent?.trim() || `航点 ${idx + 1}`;
       const desc = wEl.querySelector('desc')?.textContent?.trim() || '';
 
+      const time = wEl.querySelector('time')?.textContent?.trim();
+      const photoTime = time ? formatTimestampToCst(time) : undefined;
+
       if (!isNaN(lat) && !isNaN(lng)) {
         minLat = Math.min(minLat, lat);
         maxLat = Math.max(maxLat, lat);
@@ -320,6 +373,7 @@ export const trackParserService = {
           ele: Math.round(ele),
           description: desc,
           type: name.includes('营地') ? 'camp' : name.includes('垭口') ? 'pass' : 'point',
+          time: photoTime,
         });
       }
     });
@@ -386,6 +440,26 @@ export const trackParserService = {
         });
       }
     });
+
+    // Calculate distance along track from start and to end for each waypoint
+    if (allPoints.length > 0) {
+      waypoints.forEach((wpt) => {
+        let minDistSq = Infinity;
+        let closestDist = 0;
+        for (let i = 0; i < allPoints.length; i++) {
+          const pt = allPoints[i];
+          const dLat = pt.lat - wpt.lat;
+          const dLng = (pt.lng - wpt.lng) * Math.cos(((wpt.lat + pt.lat) / 2) * (Math.PI / 180));
+          const distSq = dLat * dLat + dLng * dLng;
+          if (distSq < minDistSq) {
+            minDistSq = distSq;
+            closestDist = pt.distanceKm || 0;
+          }
+        }
+        wpt.distFromStartKm = +closestDist.toFixed(1);
+        wpt.distToEndKm = +Math.max(0, runningDistKm - closestDist).toFixed(1);
+      });
+    }
 
     return {
       id: `track-${Date.now()}`,

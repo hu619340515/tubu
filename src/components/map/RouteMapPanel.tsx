@@ -16,11 +16,10 @@ import { ParsedTrack, TrackPoint, TrackWaypoint } from '../../types/track';
 import { trackParserService } from '../../services/trackParserService';
 import { wgs84ToGcj02 } from '../../services/coordTransform';
 import { ElevationChart } from './ElevationChart';
+import { ImageLightboxModal, LightboxImageInfo } from '../common/ImageLightboxModal';
 
 interface RouteMapPanelProps {
   onClose?: () => void;
-  onFocusNodeByTitle?: (title: string) => void;
-  highlightedNodeTitle?: string | null;
 }
 
 type LayerType = 'satellite' | 'topo' | 'osm';
@@ -95,10 +94,8 @@ function createDivIcon(emoji: string, bgClass: string, label?: string): L.DivIco
   });
 }
 
-export const RouteMapPanel: React.FC<RouteMapPanelProps> = ({
+export const RouteMapPanelComponent: React.FC<RouteMapPanelProps> = ({
   onClose,
-  onFocusNodeByTitle,
-  highlightedNodeTitle,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -106,6 +103,7 @@ export const RouteMapPanel: React.FC<RouteMapPanelProps> = ({
   const annoTileLayerRef = useRef<L.TileLayer | null>(null);
   const trackLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const hoverMarkerRef = useRef<L.CircleMarker | null>(null);
+  const hasFittedBoundsRef = useRef<boolean>(false);
 
   const [track, setTrack] = useState<ParsedTrack | null>(null);
   const [loading, setLoading] = useState(true);
@@ -113,6 +111,7 @@ export const RouteMapPanel: React.FC<RouteMapPanelProps> = ({
   const [activeLayer, setActiveLayer] = useState<LayerType>('satellite');
   const [hoveredPoint, setHoveredPoint] = useState<TrackPoint | null>(null);
   const [selectedWaypoint, setSelectedWaypoint] = useState<TrackWaypoint | null>(null);
+  const [lightboxImage, setLightboxImage] = useState<LightboxImageInfo | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
   // Initialize Leaflet Map
@@ -260,11 +259,14 @@ export const RouteMapPanel: React.FC<RouteMapPanelProps> = ({
         lineJoin: 'round',
       }).addTo(lg);
 
-      // Fit map bounds to track
-      const bounds = L.latLngBounds(latLngs);
-      if (bounds.isValid()) {
-        map.invalidateSize();
-        map.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
+      // Fit map bounds to track ONLY ONCE on initial load
+      if (!hasFittedBoundsRef.current) {
+        const bounds = L.latLngBounds(latLngs);
+        if (bounds.isValid()) {
+          map.invalidateSize();
+          map.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
+          hasFittedBoundsRef.current = true;
+        }
       }
     }
 
@@ -304,62 +306,117 @@ export const RouteMapPanel: React.FC<RouteMapPanelProps> = ({
       const [gcjLat, gcjLng] = wgs84ToGcj02(wpt.lat, wpt.lng);
       const marker = L.marker([gcjLat, gcjLng], { icon });
 
-      // Popup Content
+      const imgId = `popup-img-${wpt.id}`;
+
+      // Popup Content matching Two-Step Outdoor design (media_1788502214246.png)
       const popupHtml = `
-        <div style="font-family: inherit; font-size: 12px; line-height: 1.4; max-width: 220px;">
-          <div style="font-weight: bold; color: #2C2C2C; margin-bottom: 2px;">
-            ${cleanName || wpt.name}
-          </div>
-          ${
-            wpt.ele
-              ? `<div style="font-size: 11px; color: #5A5A40; margin-bottom: 4px;">海拔: <strong>${wpt.ele}m</strong></div>`
-              : ''
-          }
+        <div style="font-family: inherit; font-size: 12px; line-height: 1.4; min-width: 210px; max-width: 260px; padding: 2px;">
           ${
             wpt.imageUrl
-              ? `<div style="margin: 6px 0;"><img src="${wpt.imageUrl}" style="width: 100%; max-height: 120px; object-fit: cover; border-radius: 8px;" /></div>`
+              ? `
+                <div
+                  id="${imgId}"
+                  style="
+                    margin-bottom: 8px;
+                    position: relative;
+                    cursor: pointer;
+                    overflow: hidden;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+                  "
+                  title="点击查看高清大图"
+                >
+                  <img
+                    src="${wpt.imageUrl}"
+                    alt="${cleanName || wpt.name}"
+                    style="
+                      width: 100%;
+                      height: 135px;
+                      object-fit: cover;
+                      display: block;
+                    "
+                  />
+                  <div style="
+                    position: absolute;
+                    bottom: 5px;
+                    right: 5px;
+                    background: rgba(0,0,0,0.7);
+                    color: #FFFFFF;
+                    padding: 2px 7px;
+                    border-radius: 4px;
+                    font-size: 10px;
+                    font-weight: 500;
+                    display: flex;
+                    align-items: center;
+                    gap: 3px;
+                    pointer-events: none;
+                  ">
+                    🔍 点击放大
+                  </div>
+                </div>
+              `
               : ''
           }
+
+          <div style="font-size: 13.5px; font-weight: bold; color: #2C2C2C; margin-bottom: 2px;">
+            ${cleanName || wpt.name}
+          </div>
+
+          ${
+            wpt.time
+              ? `<div style="font-size: 11px; color: #7A7465; font-family: monospace; margin-bottom: 4px;">
+                  ${wpt.time}
+                </div>`
+              : ''
+          }
+
+          <div style="display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: #5A5A40; margin-top: 4px; border-top: 1px solid #EAE7DF; padding-top: 4px;">
+            ${
+              wpt.ele
+                ? `<div>海拔: <strong style="color: #2C2C2C; font-family: monospace;">${wpt.ele}m</strong></div>`
+                : ''
+            }
+            ${
+              wpt.distFromStartKm !== undefined || wpt.distToEndKm !== undefined
+                ? `<div style="display: flex; align-items: center; gap: 8px; font-size: 10.5px; color: #64748B; margin-top: 1px;">
+                    ${wpt.distFromStartKm !== undefined ? `<span>🟢 距起点 <strong style="color: #2563EB; font-family: monospace;">${wpt.distFromStartKm}km</strong></span>` : ''}
+                    ${wpt.distToEndKm !== undefined ? `<span>🏁 距终点 <strong style="color: #D95D39; font-family: monospace;">${wpt.distToEndKm}km</strong></span>` : ''}
+                  </div>`
+                : ''
+            }
+          </div>
+
           ${
             wpt.description
-              ? `<p style="font-size: 11px; color: #666; margin: 4px 0;">${wpt.description}</p>`
+              ? `<p style="font-size: 10.5px; color: #666; margin-top: 4px; line-height: 1.3;">${wpt.description}</p>`
               : ''
           }
-          <button
-            id="popup-btn-${wpt.id}"
-            style="
-              display: block;
-              width: 100%;
-              margin-top: 6px;
-              padding: 4px 8px;
-              background: #5A5A40;
-              color: white;
-              border: none;
-              border-radius: 6px;
-              font-size: 11px;
-              font-weight: bold;
-              cursor: pointer;
-            "
-          >
-            在思维导图中聚焦 🎯
-          </button>
         </div>
       `;
 
       marker.bindPopup(popupHtml);
       marker.on('popupopen', () => {
         setSelectedWaypoint(wpt);
-        const btn = document.getElementById(`popup-btn-${wpt.id}`);
-        if (btn) {
-          btn.onclick = () => {
-            onFocusNodeByTitle?.(cleanName || wpt.name);
+        const imgEl = document.getElementById(imgId);
+        if (imgEl && wpt.imageUrl) {
+          imgEl.onclick = (e) => {
+            e.stopPropagation();
+            setLightboxImage({
+              url: wpt.imageUrl!,
+              title: cleanName || wpt.name,
+              time: wpt.time,
+              ele: wpt.ele,
+              distFromStartKm: wpt.distFromStartKm,
+              distToEndKm: wpt.distToEndKm,
+              description: wpt.description,
+            });
           };
         }
       });
 
       marker.addTo(lg);
     });
-  }, [track, onFocusNodeByTitle]);
+  }, [track]);
 
   // Sync Hover Marker with Elevation Chart
   useEffect(() => {
@@ -379,22 +436,6 @@ export const RouteMapPanel: React.FC<RouteMapPanelProps> = ({
       }
     }
   }, [hoveredPoint]);
-
-  // Handle highlighted node from mindmap
-  useEffect(() => {
-    if (!highlightedNodeTitle || !track || !mapInstanceRef.current) return;
-    const map = mapInstanceRef.current;
-
-    const matched = track.waypoints.find((w) => {
-      const cleanName = w.name.replace(/<!\[CDATA\[|\]\]>/g, '').trim();
-      return cleanName.includes(highlightedNodeTitle) || highlightedNodeTitle.includes(cleanName);
-    });
-
-    if (matched) {
-      const [gcjLat, gcjLng] = wgs84ToGcj02(matched.lat, matched.lng);
-      map.flyTo([gcjLat, gcjLng], 14, { duration: 1.0 });
-    }
-  }, [highlightedNodeTitle, track]);
 
   // File Upload / Drop Handler
   const handleFile = useCallback(async (file: File) => {
@@ -615,6 +656,14 @@ export const RouteMapPanel: React.FC<RouteMapPanelProps> = ({
           hoveredPoint={hoveredPoint}
         />
       )}
+
+      {/* Full-Screen Large Photo Lightbox Modal */}
+      <ImageLightboxModal
+        imageInfo={lightboxImage}
+        onClose={() => setLightboxImage(null)}
+      />
     </div>
   );
 };
+
+export const RouteMapPanel = React.memo(RouteMapPanelComponent);
