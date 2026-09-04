@@ -117,6 +117,7 @@ export const trackParserService = {
             }
 
             const pmName = pm.querySelector('name')?.textContent?.trim() || '';
+            const pmDesc = pm.querySelector('description')?.textContent || '';
             const rawId = pm.getAttribute('id');
             const pmId = rawId ? `${rawId}-${idx}` : `wpt-${idx}`;
 

@@ -52,25 +52,22 @@ const TIMELINE_ROW_GAP = 32;
 
 function getNodeSize(node: MindMapNode, depth: number, mode: MindMapLayoutMode) {
   if (depth === 0) return { width: 260, height: 88 };
-  if (mode === 'timeline-flow') {
-    const hasTimeOrAlt = !!(node.time || node.elevation);
-    const hasDesc = !!node.description;
-    let h = 54;
-    if (hasTimeOrAlt) h += 24;
-    if (hasDesc) h += 28;
-    return { width: TIMELINE_COL_WIDTH, height: h };
-  }
-  // Classic tree
+  const cardWidth = mode === 'timeline-flow' ? TIMELINE_COL_WIDTH : 240;
+
   const hasMeta = !!(node.time || node.elevation || node.tag);
   const descLen = (node.description || '').length;
   const titleLen = (node.title || '').length;
-  let h = 48;
-  if (hasMeta) h += 24;
+
+  let h = 50;
+  if (hasMeta) h += 22;
   if (titleLen > 14) h += 18;
+  if (titleLen > 28) h += 18;
   if (descLen > 0) {
-    h += Math.max(26, Math.ceil(descLen / 16) * 16);
+    h += descLen > 16 ? 34 : 18;
   }
-  return { width: 240, height: Math.max(h, 54) };
+
+  const finalH = Math.max(h, 56);
+  return { width: cardWidth, height: finalH };
 }
 
 // Smart Edge Path Generator
@@ -113,12 +110,22 @@ function getSmartPath(
     const midX = Math.round((x1 + x2) / 2);
     const midY = Math.round((y1 + y2) / 2);
 
-    if (y2 >= y1 + 5) {
+    if (y2 >= y1) {
       if (Math.abs(x2 - x1) < 8) {
         return { path: `M ${x1} ${y1} L ${x1} ${y2}`, marker: 'arrow-vertical', midX: x1, midY };
       }
       return {
         path: `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`,
+        marker: 'arrow-vertical',
+        midX,
+        midY,
+      };
+    } else {
+      // Fallback if target was positioned above source
+      const sy = Math.round(source.y);
+      const ty = Math.round(target.y + target.height);
+      return {
+        path: `M ${x1} ${sy} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${ty}`,
         marker: 'arrow-vertical',
         midX,
         midY,
@@ -672,8 +679,14 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
         const dateSize = getNodeSize(dateNode, 2, 'timeline-flow');
         const thisColX = startColX + colIdx * (TIMELINE_COL_WIDTH + TIMELINE_COL_GAP);
 
-        // Every date header aligns on tlY
-        posMap[dateNode.id] = { x: thisColX, y: tlY, ...dateSize, depth: 2 };
+        // Every date header aligns on tlY with uniform height
+        posMap[dateNode.id] = {
+          x: thisColX,
+          y: tlY,
+          width: dateSize.width,
+          height: maxDateHeaderHeight,
+          depth: 2,
+        };
 
         if (timelineBranch && colIdx === 0) {
           edgeDefs.push({
@@ -700,7 +713,13 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
             const eventSize = getNodeSize(eventNode, 3, 'timeline-flow');
             const thisY = eventRowY[r];
 
-            posMap[eventNode.id] = { x: thisColX, y: thisY, ...eventSize, depth: 3 };
+            posMap[eventNode.id] = {
+              x: thisColX,
+              y: thisY,
+              width: eventSize.width,
+              height: maxRowHeights[r],
+              depth: 3,
+            };
 
             edgeDefs.push({
               sourceId: prevId,
@@ -2104,9 +2123,10 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
                 style={{
                   transform: `translate(${layoutNode.x}px, ${layoutNode.y}px)`,
                   width: `${layoutNode.width}px`,
+                  minHeight: `${layoutNode.height}px`,
                   zIndex: isCurrentlyDragged ? 40 : isSelected ? 30 : 10,
                 }}
-                className={`mindmap-card group absolute left-0 top-0 cursor-grab select-none transition-all duration-100 ${
+                className={`mindmap-card group absolute left-0 top-0 cursor-grab select-none flex flex-col transition-all duration-100 ${
                   isCurrentlyDragged
                     ? 'cursor-grabbing scale-102 shadow-2xl ring-2 ring-[#2563EB]'
                     : isSelected
@@ -2154,7 +2174,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
 
                 {/* Inner Card Container */}
                 <div
-                  className={`relative p-2.5 sm:p-3 rounded-2xl bg-white border shadow-xs hover:shadow-md transition-all duration-150 ${
+                  className={`relative p-2.5 sm:p-3 rounded-2xl bg-white border shadow-xs hover:shadow-md transition-all duration-150 flex-1 flex flex-col justify-between ${
                     isSelected
                       ? 'border-[#5A5A40] ring-2 ring-[#5A5A40]/50 shadow-md'
                       : isConnectSource
