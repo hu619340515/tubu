@@ -1,4 +1,4 @@
-import { MindMapNode, MindMapPreset } from '../types/mindmap';
+import { MindMapNode, MindMapPreset, MindMapEdge } from '../types/mindmap';
 import {
   GENYE_2026_MINDMAP,
   WUGONGSHAN_MINDMAP,
@@ -9,6 +9,44 @@ import {
 const STORAGE_PREFIX = 'hike_mindmap_v1_';
 
 export const mindMapStorageService = {
+  async fetchMindMapFromServer(listId: string): Promise<{
+    root: MindMapNode | null;
+    edges: MindMapEdge[] | null;
+    layoutMode: string | null;
+    viewport: any | null;
+  } | null> {
+    try {
+      if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
+        const res = await fetch(`/api/mindmap/${encodeURIComponent(listId)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.root) {
+            const key = STORAGE_PREFIX + listId;
+            localStorage.setItem(key, JSON.stringify(data.root));
+            if (Array.isArray(data.edges)) {
+              localStorage.setItem(`hike_edges_${listId}`, JSON.stringify(data.edges));
+            }
+            if (data.layoutMode) {
+              localStorage.setItem(`hike_mindmap_layoutmode_${listId}`, data.layoutMode);
+            }
+            if (data.viewport) {
+              localStorage.setItem(`hike_mindmap_viewport_${listId}`, JSON.stringify(data.viewport));
+            }
+            return {
+              root: data.root,
+              edges: data.edges || null,
+              layoutMode: data.layoutMode || null,
+              viewport: data.viewport || null,
+            };
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[MindMapStorage] Fetch from server failed, fallback to local:', e);
+    }
+    return null;
+  },
+
   getMindMap(listId: string, listTitle?: string, destination?: string): MindMapNode {
     try {
       const key = STORAGE_PREFIX + listId;
@@ -48,12 +86,41 @@ export const mindMapStorageService = {
     return initial;
   },
 
-  saveMindMap(listId: string, root: MindMapNode): void {
+  saveMindMap(
+    listId: string,
+    root: MindMapNode,
+    edges?: MindMapEdge[],
+    layoutMode?: string,
+    viewport?: any
+  ): void {
     try {
       const key = STORAGE_PREFIX + listId;
       localStorage.setItem(key, JSON.stringify(root));
+      if (edges) {
+        localStorage.setItem(`hike_edges_${listId}`, JSON.stringify(edges));
+      }
+      if (layoutMode) {
+        localStorage.setItem(`hike_mindmap_layoutmode_${listId}`, layoutMode);
+      }
+      if (viewport) {
+        localStorage.setItem(`hike_mindmap_viewport_${listId}`, JSON.stringify(viewport));
+      }
+
+      // Sync to cloud server
+      if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
+        fetch(`/api/mindmap/${encodeURIComponent(listId)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            root,
+            edges: edges || [],
+            layoutMode: layoutMode || 'tree',
+            viewport: viewport || null,
+          }),
+        }).catch((e) => console.warn('[MindMapStorage] Cloud save error:', e));
+      }
     } catch (e) {
-      console.error('Failed to save mind map to localStorage:', e);
+      console.error('Failed to save mind map:', e);
     }
   },
 

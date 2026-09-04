@@ -117,18 +117,48 @@ export default function App() {
     }
   }, []);
 
-  // When active user changes, reload their personal exclusive lists
+  // When active user changes, reload their personal exclusive lists and sync with server
   const handleUserChanged = (newUser: User) => {
     setCurrentUser(newUser);
-    const userLists = storageService.getUserLists(newUser.id);
-    setLists(userLists);
-    if (userLists.length > 0) {
-      setActiveListId(userLists[0].id);
+    const cachedLists = storageService.getUserLists(newUser.id);
+    setLists(cachedLists);
+    if (cachedLists.length > 0) {
+      setActiveListId(cachedLists[0].id);
     } else {
       setActiveListId('');
     }
     setIsAuthOpen(false);
+
+    // Sync from server database across devices
+    storageService
+      .fetchUserListsFromServer(newUser.id)
+      .then((serverLists) => {
+        if (serverLists && serverLists.length > 0) {
+          setLists(serverLists);
+          setActiveListId((prev) =>
+            serverLists.some((l) => l.id === prev) ? prev : serverLists[0].id
+          );
+        }
+      })
+      .catch((e) => console.warn('[App] Server lists sync failed:', e));
   };
+
+  // Sync server lists for current user on mount
+  useEffect(() => {
+    if (currentUser?.id) {
+      storageService
+        .fetchUserListsFromServer(currentUser.id)
+        .then((serverLists) => {
+          if (serverLists && serverLists.length > 0) {
+            setLists(serverLists);
+            setActiveListId((prev) =>
+              serverLists.some((l) => l.id === prev) ? prev : serverLists[0].id
+            );
+          }
+        })
+        .catch((e) => console.warn('[App] Initial server lists sync failed:', e));
+    }
+  }, [currentUser?.id]);
 
   // Safe logout handler
   const handleLogout = useCallback(() => {
@@ -829,12 +859,14 @@ export default function App() {
         onAddList={handleAddList}
       />
 
-      {/* Multi-user Auth & Account Switch Modal */}
+      {/* User Auth & Personal Profile Modal */}
       <AuthModal
         isOpen={isAuthOpen}
         onClose={() => setIsAuthOpen(false)}
         currentUser={currentUser}
         onUserChanged={handleUserChanged}
+        onLogout={handleLogout}
+        isMandatory={!currentUser}
       />
 
       {/* Admin Management Console Modal */}

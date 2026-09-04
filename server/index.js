@@ -32,19 +32,9 @@ const DEFAULT_DB = {
       isAdmin: true,
       createdAt: Date.now() - 60 * 24 * 3600 * 1000,
     },
-    {
-      id: 'user-juanjuan',
-      username: '卷卷卷',
-      email: 'juanjuan@trailpack.cn',
-      passwordHash: '619340515',
-      avatar: '⛰️',
-      experienceLevel: 'intermediate',
-      role: 'user',
-      isAdmin: false,
-      createdAt: Date.now() - 10 * 60 * 1000,
-    },
   ],
   lists: {},
+  mindmaps: {},
   announcement: {
     id: 'announcement-default',
     enabled: true,
@@ -63,14 +53,17 @@ function readDB() {
       const raw = fs.readFileSync(DB_FILE, 'utf-8');
       const data = JSON.parse(raw);
       if (data && Array.isArray(data.users)) {
-        // Make sure wangzai exists as admin
+        // Clean up any old mock juanjuan test accounts
+        data.users = data.users.filter(
+          (u) => u.id !== 'user-juanjuan' && u.email !== 'juanjuan@trailpack.cn'
+        );
+        // Make sure wangzai exists as super admin
         if (!data.users.some((u) => u.email?.toLowerCase() === '619340515@qq.com')) {
           data.users.unshift(DEFAULT_DB.users[0]);
         }
-        // Make sure 卷卷卷 exists
-        if (!data.users.some((u) => u.username === '卷卷卷')) {
-          data.users.push(DEFAULT_DB.users[1]);
-        }
+        if (!data.lists) data.lists = {};
+        if (!data.mindmaps) data.mindmaps = {};
+        if (!data.announcement) data.announcement = DEFAULT_DB.announcement;
         return data;
       }
     }
@@ -93,8 +86,9 @@ function writeDB(data) {
   }
 }
 
-// Middleware
-app.use(express.json());
+// Middleware: allow large payloads for mindmap nodes/coordinates
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // CORS handler
 app.use((req, res, next) => {
@@ -112,14 +106,7 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: Date.now() });
 });
 
-// 1. Get public users list
-app.get('/api/users', (req, res) => {
-  const db = readDB();
-  const safeUsers = db.users.map(({ passwordHash, ...u }) => u);
-  res.json(safeUsers);
-});
-
-// 2. User registration
+// 1. User Registration (Public API)
 app.post('/api/auth/register', (req, res) => {
   const { username, email, password, avatar, experienceLevel } = req.body;
   if (!username || !email || !password) {
@@ -157,7 +144,7 @@ app.post('/api/auth/register', (req, res) => {
   res.json({ success: true, user: safeUser });
 });
 
-// 3. User login verification
+// 2. User Login (Public API)
 app.post('/api/auth/login', (req, res) => {
   const { account, password } = req.body;
   if (!account || !password) {
@@ -182,34 +169,85 @@ app.post('/api/auth/login', (req, res) => {
   res.json({ success: true, user: safeUser });
 });
 
-// 4. Admin: Get all users with password & details
+// 3. User Lists Persistence (GET & POST)
+app.get('/api/lists/:userId', (req, res) => {
+  const { userId } = req.params;
+  const db = readDB();
+  const userLists = (db.lists && db.lists[userId]) || [];
+  res.json(userLists);
+});
+
+app.post('/api/lists/:userId', (req, res) => {
+  const { userId } = req.params;
+  const { lists } = req.body;
+  if (!Array.isArray(lists)) {
+    return res.status(400).json({ success: false, error: '清单数据格式错误' });
+  }
+
+  const db = readDB();
+  if (!db.lists) db.lists = {};
+  db.lists[userId] = lists;
+  writeDB(db);
+  res.json({ success: true, count: lists.length });
+});
+
+// 4. Mind Map Persistence (GET & POST)
+app.get('/api/mindmap/:listId', (req, res) => {
+  const { listId } = req.params;
+  const db = readDB();
+  const mapData = (db.mindmaps && db.mindmaps[listId]) || null;
+  res.json(mapData);
+});
+
+app.post('/api/mindmap/:listId', (req, res) => {
+  const { listId } = req.params;
+  const { root, edges, layoutMode, viewport } = req.body;
+
+  const db = readDB();
+  if (!db.mindmaps) db.mindmaps = {};
+  const current = db.mindmaps[listId] || {};
+
+  db.mindmaps[listId] = {
+    ...current,
+    ...(root !== undefined ? { root } : {}),
+    ...(edges !== undefined ? { edges } : {}),
+    ...(layoutMode !== undefined ? { layoutMode } : {}),
+    ...(viewport !== undefined ? { viewport } : {}),
+    updatedAt: Date.now(),
+  };
+
+  writeDB(db);
+  res.json({ success: true, listId });
+});
+
+// 5. Site Announcement (GET & POST)
+app.get('/api/announcement', (req, res) => {
+  const db = readDB();
+  res.json(db.announcement || DEFAULT_DB.announcement);
+});
+
+app.post('/api/announcement', (req, res) => {
+  const { announcement } = req.body;
+  if (!announcement) {
+    return res.status(400).json({ success: false, error: '缺少公告数据' });
+  }
+
+  const db = readDB();
+  db.announcement = {
+    ...announcement,
+    updatedAt: Date.now(),
+  };
+  writeDB(db);
+  res.json({ success: true, announcement: db.announcement });
+});
+
+// 6. Admin: Get all users with password & details
 app.get('/api/admin/users', (req, res) => {
   const db = readDB();
   res.json(db.users);
 });
 
-// 5. Admin: Stats summary
-app.get('/api/admin/stats', (req, res) => {
-  const db = readDB();
-  const totalUsers = db.users.length;
-  const adminCount = db.users.filter((u) => u.isAdmin || u.role === 'admin').length;
-  const userCount = totalUsers - adminCount;
-  let totalLists = 0;
-  if (db.lists) {
-    Object.values(db.lists).forEach((arr) => {
-      if (Array.isArray(arr)) totalLists += arr.length;
-    });
-  }
-
-  res.json({
-    totalUsers,
-    adminCount,
-    userCount,
-    totalLists,
-  });
-});
-
-// 6. Admin: Reset user password
+// 7. Admin: Reset user password
 app.post('/api/admin/reset-password', (req, res) => {
   const { userId, newPassword } = req.body;
   if (!userId || !newPassword) {
@@ -227,7 +265,7 @@ app.post('/api/admin/reset-password', (req, res) => {
   res.json({ success: true, message: `已成功将用户【${user.username}】密码重置` });
 });
 
-// 7. Admin: Delete user
+// 8. Admin: Delete user
 app.delete('/api/admin/users/:id', (req, res) => {
   const { id } = req.params;
   const db = readDB();
@@ -248,47 +286,25 @@ app.delete('/api/admin/users/:id', (req, res) => {
   res.json({ success: true, message: `已成功删除用户【${user.username}】` });
 });
 
-// 8. User lists sync
-app.get('/api/lists/:userId', (req, res) => {
-  const { userId } = req.params;
+// 9. Admin: Stats summary
+app.get('/api/admin/stats', (req, res) => {
   const db = readDB();
-  const userLists = (db.lists && db.lists[userId]) || [];
-  res.json(userLists);
-});
-
-app.post('/api/lists/:userId', (req, res) => {
-  const { userId } = req.params;
-  const { lists } = req.body;
-  if (!Array.isArray(lists)) {
-    return res.status(400).json({ success: false, error: '清单数据格式错误' });
+  const totalUsers = db.users.length;
+  const adminCount = db.users.filter((u) => u.isAdmin || u.role === 'admin').length;
+  const userCount = totalUsers - adminCount;
+  let totalLists = 0;
+  if (db.lists) {
+    Object.values(db.lists).forEach((arr) => {
+      if (Array.isArray(arr)) totalLists += arr.length;
+    });
   }
 
-  const db = readDB();
-  if (!db.lists) db.lists = {};
-  db.lists[userId] = lists;
-  writeDB(db);
-  res.json({ success: true });
-});
-
-// 9. Site Announcement
-app.get('/api/announcement', (req, res) => {
-  const db = readDB();
-  res.json(db.announcement || DEFAULT_DB.announcement);
-});
-
-app.post('/api/announcement', (req, res) => {
-  const { announcement } = req.body;
-  if (!announcement) {
-    return res.status(400).json({ success: false, error: '缺少公告数据' });
-  }
-
-  const db = readDB();
-  db.announcement = {
-    ...announcement,
-    updatedAt: Date.now(),
-  };
-  writeDB(db);
-  res.json({ success: true, announcement: db.announcement });
+  res.json({
+    totalUsers,
+    adminCount,
+    userCount,
+    totalLists,
+  });
 });
 
 app.listen(PORT, '0.0.0.0', () => {

@@ -437,7 +437,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
 
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Reload when list changes
+  // Reload when list changes and sync with cloud server
   useEffect(() => {
     const freshRoot = mindMapStorageService.getMindMap(listId, listTitle, destination);
     let freshEdges: MindMapEdge[] = [];
@@ -455,21 +455,45 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
     setDragOffsets({});
+
+    // Also fetch real-time cloud data
+    let isCancelled = false;
+    mindMapStorageService
+      .fetchMindMapFromServer(listId)
+      .then((serverData) => {
+        if (isCancelled || !serverData) return;
+        if (serverData.root) {
+          setRoot(serverData.root);
+          const nextEdges =
+            Array.isArray(serverData.edges) && serverData.edges.length > 0
+              ? serverData.edges
+              : generateInitialEdges(serverData.root);
+          setEdges(nextEdges);
+          setHistory([{ root: serverData.root, edges: nextEdges }]);
+          setHistoryIndex(0);
+        }
+        if (
+          serverData.layoutMode &&
+          ['tree', 'timeline', 'free'].includes(serverData.layoutMode)
+        ) {
+          setLayoutMode(serverData.layoutMode as any);
+        }
+      })
+      .catch((e) => console.warn('[MindMapCanvas] Cloud sync error:', e));
+
+    return () => {
+      isCancelled = true;
+    };
   }, [listId, listTitle, destination]);
 
-  // Push new state into history & auto-save to localStorage
+  // Push new state into history & auto-save to localStorage & cloud server
   const pushState = useCallback(
     (newRoot: MindMapNode, newEdges?: MindMapEdge[]) => {
       setSaveStatus('saving');
       const edgesToSave = newEdges ?? edges;
       setRoot(newRoot);
       setEdges(edgesToSave);
-      mindMapStorageService.saveMindMap(listId, newRoot);
-      try {
-        localStorage.setItem(`hike_edges_${listId}`, JSON.stringify(edgesToSave));
-        localStorage.setItem(`hike_mindmap_layoutmode_${listId}`, layoutMode);
-        localStorage.setItem(`hike_mindmap_viewport_${listId}`, JSON.stringify({ zoom, pan }));
-      } catch (e) {}
+      mindMapStorageService.saveMindMap(listId, newRoot, edgesToSave, layoutMode, { zoom, pan });
 
       setHistory((prev) => {
         const next = prev.slice(0, historyIndex + 1);

@@ -19,17 +19,6 @@ const DEFAULT_USERS: (User & { passwordHash: string })[] = [
     isAdmin: true,
     createdAt: Date.now() - 60 * 24 * 3600 * 1000,
   },
-  {
-    id: 'user-juanjuan',
-    username: '卷卷卷',
-    email: 'juanjuan@trailpack.cn',
-    passwordHash: '619340515',
-    avatar: '⛰️',
-    experienceLevel: 'intermediate',
-    role: 'user',
-    isAdmin: false,
-    createdAt: Date.now() - 10 * 60 * 1000,
-  },
 ];
 
 const DEFAULT_ANNOUNCEMENT: SiteAnnouncement = {
@@ -48,13 +37,15 @@ function ensureDataMigrated(): void {
     const rawUsers = localStorage.getItem(USERS_KEY);
     let users: (User & { passwordHash: string })[] = rawUsers ? JSON.parse(rawUsers) : [];
 
-    // 1. Filter out deleted users "小鹿" and "岩石"
+    // 1. Filter out deleted mock users
     users = users.filter(
       (u) =>
         u.id !== 'user-deer' &&
         u.email !== 'deer@trailpack.cn' &&
         u.id !== 'user-rock' &&
-        u.email !== 'rock@trailpack.cn'
+        u.email !== 'rock@trailpack.cn' &&
+        u.id !== 'user-juanjuan' &&
+        u.email !== 'juanjuan@trailpack.cn'
     );
 
     // 2. Ensure administrator "旺仔" exists with admin privileges and correct credentials
@@ -66,12 +57,6 @@ function ensureDataMigrated(): void {
       users[wangzaiIdx].role = 'admin';
       users[wangzaiIdx].username = '旺仔';
       users[wangzaiIdx].passwordHash = '619340515';
-    }
-
-    // 3. Ensure registered friend "卷卷卷" exists
-    const juanjuanIdx = users.findIndex((u) => u?.username === '卷卷卷');
-    if (juanjuanIdx === -1) {
-      users.push(DEFAULT_USERS[1]);
     }
 
     localStorage.setItem(USERS_KEY, JSON.stringify(users));
@@ -183,21 +168,10 @@ export const storageService = {
         const res = await fetch('/api/admin/users');
         if (res.ok) {
           const serverUsers: (User & { passwordHash: string })[] = await res.json();
-          if (Array.isArray(serverUsers) && serverUsers.length > 0) {
-            const localRaw = localStorage.getItem(USERS_KEY);
-            const localUsers: (User & { passwordHash: string })[] = localRaw ? JSON.parse(localRaw) : [];
-
-            // Merge unique by email
-            const userMap = new Map<string, User & { passwordHash: string }>();
-            serverUsers.forEach((u) => userMap.set(u.email.toLowerCase(), u));
-            localUsers.forEach((u) => {
-              if (!userMap.has(u.email.toLowerCase())) {
-                userMap.set(u.email.toLowerCase(), u);
-              }
-            });
-            const merged = Array.from(userMap.values());
-            localStorage.setItem(USERS_KEY, JSON.stringify(merged));
-            return merged;
+          if (Array.isArray(serverUsers)) {
+            // Server is single source of truth: write directly to local cache
+            localStorage.setItem(USERS_KEY, JSON.stringify(serverUsers));
+            return serverUsers;
           }
         }
       }
@@ -231,49 +205,68 @@ export const storageService = {
     localStorage.setItem(ACTIVE_USER_KEY, JSON.stringify(user));
   },
 
-  register(
+  async register(
     username: string,
     email: string,
     password: string,
     avatar = '🎒',
     experienceLevel: 'rookie' | 'intermediate' | 'expert' = 'intermediate'
-  ): { success: boolean; error?: string; user?: User } {
+  ): Promise<{ success: boolean; error?: string; user?: User }> {
     try {
+      const lowerEmail = email.trim().toLowerCase();
+      const trimUsername = username.trim();
+
+      // 1. Primary: register to cloud server
+      let serverUser: User | null = null;
+      if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
+        try {
+          const res = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              username: trimUsername,
+              email: lowerEmail,
+              password,
+              avatar,
+              experienceLevel,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            return { success: false, error: data.error || '注册失败' };
+          }
+          serverUser = data.user;
+        } catch (netErr) {
+          console.warn('[Storage] Server offline during registration, fallback to local:', netErr);
+        }
+      }
+
       ensureDataMigrated();
       const raw = localStorage.getItem(USERS_KEY);
       const existing: (User & { passwordHash: string })[] = raw ? JSON.parse(raw) : [...DEFAULT_USERS];
 
-      if (existing.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
+      if (existing.some((u) => u.email.toLowerCase() === lowerEmail)) {
         return { success: false, error: '该邮箱已被注册，请直接登录' };
       }
-      if (existing.some((u) => u.username.toLowerCase() === username.toLowerCase())) {
+      if (existing.some((u) => u.username.toLowerCase() === trimUsername.toLowerCase())) {
         return { success: false, error: '该昵称已被使用，请换一个' };
       }
 
       const isFirstUser = existing.length === 0;
       const newUser: User & { passwordHash: string } = {
-        id: 'user-' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
-        username,
-        email,
+        id: serverUser?.id || ('user-' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6)),
+        username: trimUsername,
+        email: lowerEmail,
         passwordHash: password,
         avatar,
         experienceLevel,
-        role: isFirstUser ? 'admin' : 'user',
-        isAdmin: isFirstUser,
-        createdAt: Date.now(),
+        role: serverUser?.role || (isFirstUser ? 'admin' : 'user'),
+        isAdmin: serverUser?.isAdmin ?? isFirstUser,
+        createdAt: serverUser?.createdAt || Date.now(),
       };
 
       existing.push(newUser);
       localStorage.setItem(USERS_KEY, JSON.stringify(existing));
-
-      // Asynchronously sync new registration to central cloud server
-      if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
-        fetch('/api/auth/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, email, password, avatar, experienceLevel }),
-        }).catch((err) => console.warn('[Storage] Cloud register sync warning:', err));
-      }
 
       const { passwordHash, ...safeUser } = newUser;
       this.setActiveUser(safeUser);
@@ -292,21 +285,55 @@ export const storageService = {
       this.saveUserLists(safeUser.id, initialLists);
 
       return { success: true, user: safeUser };
-    } catch (e) {
-      return { success: false, error: '注册存储失败，请检查浏览器本地存储权限' };
+    } catch (e: any) {
+      return { success: false, error: e?.message || '注册发生异常' };
     }
   },
 
-  login(emailOrUsername: string, password: string): { success: boolean; error?: string; user?: User } {
+  async login(emailOrUsername: string, password: string): Promise<{ success: boolean; error?: string; user?: User }> {
     try {
+      const query = emailOrUsername.trim().toLowerCase();
+
+      // 1. Primary: login against central server
+      if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
+        try {
+          const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ account: emailOrUsername.trim(), password }),
+          });
+          const data = await res.json();
+          if (res.ok && data.success && data.user) {
+            this.setActiveUser(data.user);
+            // Cache user in local store for rapid offline support
+            const users = this.getAllUsersWithPasswords();
+            const idx = users.findIndex(
+              (u) => u.id === data.user.id || u.email.toLowerCase() === data.user.email.toLowerCase()
+            );
+            const fullUser = { ...data.user, passwordHash: password };
+            if (idx === -1) {
+              users.push(fullUser);
+            } else {
+              users[idx] = fullUser;
+            }
+            localStorage.setItem(USERS_KEY, JSON.stringify(users));
+            return { success: true, user: data.user };
+          } else if (res.status === 401 || res.status === 400) {
+            return { success: false, error: data.error || '账号或密码不正确' };
+          }
+        } catch (netErr) {
+          console.warn('[Storage] Server offline during login, checking local fallback:', netErr);
+        }
+      }
+
+      // 2. Offline fallback to local storage
       ensureDataMigrated();
       const raw = localStorage.getItem(USERS_KEY);
       const existing: (User & { passwordHash: string })[] = raw ? JSON.parse(raw) : [...DEFAULT_USERS];
 
       const user = existing.find(
         (u) =>
-          (u.email.toLowerCase() === emailOrUsername.toLowerCase() ||
-            u.username.toLowerCase() === emailOrUsername.toLowerCase()) &&
+          (u.email.toLowerCase() === query || u.username.toLowerCase() === query) &&
           u.passwordHash === password
       );
 
@@ -317,8 +344,8 @@ export const storageService = {
       const { passwordHash, ...safeUser } = user;
       this.setActiveUser(safeUser);
       return { success: true, user: safeUser };
-    } catch (e) {
-      return { success: false, error: '登录发生异常' };
+    } catch (e: any) {
+      return { success: false, error: e?.message || '登录发生异常' };
     }
   },
 
@@ -357,6 +384,40 @@ export const storageService = {
     }
   },
 
+  async fetchUserListsFromServer(userId: string): Promise<HikingList[]> {
+    try {
+      if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
+        const res = await fetch(`/api/lists/${encodeURIComponent(userId)}`);
+        if (res.ok) {
+          const serverLists: HikingList[] = await res.json();
+          if (Array.isArray(serverLists) && serverLists.length > 0) {
+            const key = LISTS_PREFIX + userId;
+            localStorage.setItem(key, JSON.stringify(serverLists));
+            return serverLists;
+          } else if (Array.isArray(serverLists) && serverLists.length === 0) {
+            // If server has no lists for this user yet, check local cache
+            const key = LISTS_PREFIX + userId;
+            const localRaw = localStorage.getItem(key);
+            if (localRaw) {
+              const localLists: HikingList[] = JSON.parse(localRaw);
+              if (Array.isArray(localLists) && localLists.length > 0) {
+                this.saveUserLists(userId, localLists);
+                return localLists;
+              }
+            }
+            // If neither has lists, seed defaults and push to server
+            const defaultLists = this.getUserLists(userId);
+            this.saveUserLists(userId, defaultLists);
+            return defaultLists;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[Storage] Fetch user lists from server failed, using local cache:', e);
+    }
+    return this.getUserLists(userId);
+  },
+
   saveUserLists(userId: string, lists: HikingList[]): void {
     try {
       const key = LISTS_PREFIX + userId;
@@ -377,29 +438,38 @@ export const storageService = {
 
   // ================= ADMIN MANAGEMENT APIS =================
 
-  updateUserPassword(userId: string, newPass: string): { success: boolean; error?: string } {
+  async updateUserPassword(userId: string, newPass: string): Promise<{ success: boolean; error?: string }> {
     try {
       const users = this.getAllUsersWithPasswords();
       const idx = users.findIndex((u) => u.id === userId);
       if (idx === -1) return { success: false, error: '用户不存在' };
+
+      if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
+        try {
+          const res = await fetch('/api/admin/reset-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, newPassword: newPass }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            return { success: false, error: data.error || '修改密码失败' };
+          }
+        } catch (e) {
+          console.warn('[Storage] Server reset password failed:', e);
+        }
+      }
+
       users[idx].passwordHash = newPass;
       localStorage.setItem(USERS_KEY, JSON.stringify(users));
 
-      if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
-        fetch('/api/admin/reset-password', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, newPassword: newPass }),
-        }).catch((e) => console.warn('[Storage] Reset password sync warning:', e));
-      }
-
       return { success: true };
-    } catch (e) {
-      return { success: false, error: '修改密码失败' };
+    } catch (e: any) {
+      return { success: false, error: e?.message || '修改密码失败' };
     }
   },
 
-  deleteUser(userId: string): { success: boolean; error?: string } {
+  async deleteUser(userId: string): Promise<{ success: boolean; error?: string }> {
     try {
       let users = this.getAllUsersWithPasswords();
       const target = users.find((u) => u.id === userId);
@@ -408,6 +478,22 @@ export const storageService = {
         return { success: false, error: '超级管理员账号不可删除' };
       }
 
+      // 1. Delete on server first
+      if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
+        try {
+          const res = await fetch(`/api/admin/users/${encodeURIComponent(userId)}`, {
+            method: 'DELETE',
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            return { success: false, error: data.error || '删除失败' };
+          }
+        } catch (e) {
+          console.warn('[Storage] Server delete user failed:', e);
+        }
+      }
+
+      // 2. Remove from local store
       users = users.filter((u) => u.id !== userId);
       localStorage.setItem(USERS_KEY, JSON.stringify(users));
 
@@ -420,15 +506,9 @@ export const storageService = {
         this.logout();
       }
 
-      if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
-        fetch(`/api/admin/users/${encodeURIComponent(userId)}`, {
-          method: 'DELETE',
-        }).catch((e) => console.warn('[Storage] Delete user sync warning:', e));
-      }
-
       return { success: true };
-    } catch (e) {
-      return { success: false, error: '删除用户失败' };
+    } catch (e: any) {
+      return { success: false, error: e?.message || '删除用户失败' };
     }
   },
 
@@ -452,28 +532,56 @@ export const storageService = {
     }
   },
 
-  adminCreateUser(
+  async adminCreateUser(
     username: string,
     email: string,
     password: string,
     avatar: string,
     role: 'admin' | 'user'
-  ): { success: boolean; error?: string } {
+  ): Promise<{ success: boolean; error?: string }> {
     try {
+      const trimUsername = username.trim();
+      const lowerEmail = email.trim().toLowerCase();
+
+      // 1. Register on server
+      let serverUser: User | null = null;
+      if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
+        try {
+          const res = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              username: trimUsername,
+              email: lowerEmail,
+              password,
+              avatar: avatar || '🎒',
+              experienceLevel: 'intermediate',
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            return { success: false, error: data.error || '创建用户失败' };
+          }
+          serverUser = data.user;
+        } catch (e) {
+          console.warn('[Storage] Server create user failed:', e);
+        }
+      }
+
       const users = this.getAllUsersWithPasswords();
-      if (users.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
+      if (users.some((u) => u.email.toLowerCase() === lowerEmail)) {
         return { success: false, error: '邮箱已被注册' };
       }
       const newUser: User & { passwordHash: string } = {
-        id: 'user-' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
-        username,
-        email,
+        id: serverUser?.id || ('user-' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6)),
+        username: trimUsername,
+        email: lowerEmail,
         passwordHash: password,
         avatar: avatar || '🎒',
         experienceLevel: 'intermediate',
         role,
         isAdmin: role === 'admin',
-        createdAt: Date.now(),
+        createdAt: serverUser?.createdAt || Date.now(),
       };
       users.push(newUser);
       localStorage.setItem(USERS_KEY, JSON.stringify(users));
@@ -481,8 +589,8 @@ export const storageService = {
       // Seed initial list
       this.getUserLists(newUser.id);
       return { success: true };
-    } catch (e) {
-      return { success: false, error: '创建用户失败' };
+    } catch (e: any) {
+      return { success: false, error: e?.message || '创建用户失败' };
     }
   },
 

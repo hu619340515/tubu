@@ -84,31 +84,31 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   if (!isOpen || !currentUser || !currentUser.isAdmin) return null;
 
   // Handle password reset
-  const handleConfirmResetPassword = (e: React.FormEvent) => {
+  const handleConfirmResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!resetPwdUser || !newPassword.trim()) return;
-    const res = storageService.updateUserPassword(resetPwdUser.id, newPassword.trim());
+    const res = await storageService.updateUserPassword(resetPwdUser.id, newPassword.trim());
     if (res.success) {
       showFeedback(`已成功将用户【${resetPwdUser.username}】的密码重置为：${newPassword.trim()}`);
       setResetPwdUser(null);
       setNewPassword('');
-      reloadData();
+      await reloadData();
     } else {
       showFeedback(res.error || '修改密码失败', 'error');
     }
   };
 
   // Handle delete user
-  const handleDeleteUser = (u: User) => {
+  const handleDeleteUser = async (u: User) => {
     if (u.email === '619340515@qq.com') {
       showFeedback('超级管理员账号不可删除', 'error');
       return;
     }
     if (confirm(`确定要删除用户【${u.username} (${u.email})】及其专属清单数据吗？该操作不可撤销！`)) {
-      const res = storageService.deleteUser(u.id);
+      const res = await storageService.deleteUser(u.id);
       if (res.success) {
         showFeedback(`已删除用户【${u.username}】`);
-        reloadData();
+        await reloadData();
         onUserListsChanged?.();
       } else {
         showFeedback(res.error || '删除失败', 'error');
@@ -132,13 +132,13 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   };
 
   // Handle create user
-  const handleCreateUser = (e: React.FormEvent) => {
+  const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUsername.trim() || !newUserEmail.trim() || !newUserPwd.trim()) {
       showFeedback('请完整填写新用户资料', 'error');
       return;
     }
-    const res = storageService.adminCreateUser(
+    const res = await storageService.adminCreateUser(
       newUsername.trim(),
       newUserEmail.trim(),
       newUserPwd.trim(),
@@ -151,7 +151,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       setNewUsername('');
       setNewUserEmail('');
       setNewUserPwd('');
-      reloadData();
+      await reloadData();
     } else {
       showFeedback(res.error || '创建失败', 'error');
     }
