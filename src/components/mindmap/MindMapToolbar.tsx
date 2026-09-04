@@ -13,7 +13,6 @@ import {
   Undo2,
   Redo2,
   GitFork,
-  CalendarDays,
 } from 'lucide-react';
 import { MindMapPreset, MindMapLayoutMode } from '../../types/mindmap';
 
@@ -66,33 +65,16 @@ export const MindMapToolbar: React.FC<MindMapToolbarProps> = ({
     <div className="flex items-center justify-between gap-1.5 sm:gap-2 p-1.5 sm:p-2 bg-white/95 backdrop-blur-md border border-[#D9D4C7] rounded-xl sm:rounded-2xl shadow-sm text-[#2C2C2C] max-w-full overflow-x-auto">
       {/* Left: Layout Switcher & Presets */}
       <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-        {/* Layout Switcher: Timeline Flow vs Classic Tree */}
+        {/* Mind Map Layout Button */}
         <div className="flex items-center bg-[#FAF8F5] border border-[#D9D4C7] p-0.5 rounded-xl shadow-2xs shrink-0">
           <button
             type="button"
             onClick={() => onToggleLayoutMode('timeline-flow')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg transition ${
-              layoutMode === 'timeline-flow'
-                ? 'bg-[#5A5A40] text-white shadow-2xs'
-                : 'text-[#7A7465] hover:text-[#2C2C2C]'
-            }`}
-            title="横向日期推进，当日纵向时间流连接"
-          >
-            <CalendarDays className="w-3.5 h-3.5" />
-            <span>横向时间流</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onToggleLayoutMode('classic-tree')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg transition ${
-              layoutMode === 'classic-tree'
-                ? 'bg-[#5A5A40] text-white shadow-2xs'
-                : 'text-[#7A7465] hover:text-[#2C2C2C]'
-            }`}
-            title="标准思维导图树状分支结构"
+            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg bg-[#5A5A40] text-white shadow-2xs transition"
+            title="思维导图（横向日期推进与纵向节点规划）"
           >
             <GitFork className="w-3.5 h-3.5" />
-            <span>经典树状</span>
+            <span>思维导图</span>
           </button>
         </div>
 

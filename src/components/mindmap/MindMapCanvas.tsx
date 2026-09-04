@@ -310,11 +310,11 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   const [history, setHistory] = useState<Snapshot[]>([{ root, edges }]);
   const [historyIndex, setHistoryIndex] = useState(0);
 
-  // Layout Mode: 'timeline-flow' (default) or 'classic-tree' with persistent storage
+  // Layout Mode: 'timeline-flow' (思维导图) with persistent storage
   const [layoutMode, setLayoutMode] = useState<MindMapLayoutMode>(() => {
     try {
       const saved = localStorage.getItem(`hike_mindmap_layoutmode_${listId}`);
-      if (saved === 'timeline-flow' || saved === 'classic-tree') return saved;
+      if (saved === 'timeline-flow') return 'timeline-flow';
     } catch (e) {}
     return 'timeline-flow';
   });
@@ -1685,11 +1685,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
           zoom={zoom}
           layoutMode={layoutMode}
           saveStatus={saveStatus}
-          onToggleLayoutMode={() =>
-            setLayoutMode((m) =>
-              m === 'timeline-flow' ? 'classic-tree' : 'timeline-flow'
-            )
-          }
+          onToggleLayoutMode={() => setLayoutMode('timeline-flow')}
           canUndo={historyIndex > 0}
           canRedo={historyIndex < history.length - 1}
           onUndo={handleUndo}
@@ -2162,7 +2158,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
           )}
 
           <div className="px-2.5 py-1 bg-white/90 backdrop-blur border border-[#D9D4C7] rounded-xl shadow-2xs">
-            当前排版：<strong>{layoutMode === 'timeline-flow' ? '横向时间流' : '经典树状'}</strong>
+            当前视图：<strong>思维导图</strong>
           </div>
         </div>
       </div>

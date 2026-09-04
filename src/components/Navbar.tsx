@@ -91,7 +91,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
             >
               <GitFork className="w-3.5 h-3.5" />
-              <span>行程导图</span>
+              <span>思维导图</span>
             </button>
             <button
               type="button"
