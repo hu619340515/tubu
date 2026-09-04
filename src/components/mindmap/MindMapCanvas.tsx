@@ -51,7 +51,7 @@ const TIMELINE_COL_GAP = 64;
 const TIMELINE_ROW_GAP = 32;
 
 function getNodeSize(node: MindMapNode, depth: number, mode: MindMapLayoutMode) {
-  if (depth === 0) return { width: 250, height: 86 };
+  if (depth === 0) return { width: 260, height: 88 };
   if (mode === 'timeline-flow') {
     const hasTimeOrAlt = !!(node.time || node.elevation);
     const hasDesc = !!node.description;
@@ -61,8 +61,16 @@ function getNodeSize(node: MindMapNode, depth: number, mode: MindMapLayoutMode) 
     return { width: TIMELINE_COL_WIDTH, height: h };
   }
   // Classic tree
-  const hasDesc = !!node.description;
-  return { width: 220, height: hasDesc ? 78 : 52 };
+  const hasMeta = !!(node.time || node.elevation || node.tag);
+  const descLen = (node.description || '').length;
+  const titleLen = (node.title || '').length;
+  let h = 48;
+  if (hasMeta) h += 24;
+  if (titleLen > 14) h += 18;
+  if (descLen > 0) {
+    h += Math.max(26, Math.ceil(descLen / 16) * 16);
+  }
+  return { width: 240, height: Math.max(h, 54) };
 }
 
 // Smart Edge Path Generator
@@ -190,10 +198,11 @@ function getSmartPath(
 
 // Generate initial connections from starting mindmap hierarchy
 function generateInitialEdges(rootNode: MindMapNode): MindMapEdge[] {
+  if (!rootNode || !rootNode.id) return [];
   const edgeList: MindMapEdge[] = [];
 
-  const timelineBranch = rootNode.children?.find((c) =>
-    c.title.includes('时间线') || c.title.includes('行程')
+  const timelineBranch = (rootNode.children || []).find((c) =>
+    c.title?.includes('时间线') || c.title?.includes('行程')
   );
   const otherBranches = (rootNode.children || []).filter(
     (c) => c.id !== timelineBranch?.id
@@ -472,11 +481,15 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
           setHistory([{ root: serverData.root, edges: nextEdges }]);
           setHistoryIndex(0);
         }
-        if (
-          serverData.layoutMode &&
-          ['tree', 'timeline', 'free'].includes(serverData.layoutMode)
-        ) {
-          setLayoutMode(serverData.layoutMode as any);
+        if (serverData.layoutMode) {
+          if (
+            serverData.layoutMode === 'timeline' ||
+            serverData.layoutMode === 'timeline-flow'
+          ) {
+            setLayoutMode('timeline-flow');
+          } else {
+            setLayoutMode('classic-tree');
+          }
         }
       })
       .catch((e) => console.warn('[MindMapCanvas] Cloud sync error:', e));
@@ -561,6 +574,10 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       kind: 'horizontal-spine' | 'vertical-step' | 'branch-curve';
       color?: string;
     }> = [];
+
+    if (!root || !root.id) {
+      return { posMap, edgeDefs };
+    }
 
     if (layoutMode === 'timeline-flow') {
       // 1. Root Node at top left
@@ -731,30 +748,51 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
         });
       }
     } else {
-      // Classic Tree Mode
-      let currentY = 60;
-      function build(node: MindMapNode, x: number, startY: number, depth: number) {
-        const size = getNodeSize(node, depth, 'classic-tree');
-        posMap[node.id] = { x, y: startY, ...size, depth };
+      // Classic Tree Mode (Hierarchical Left-to-Right layout with Post-Order Subtree Bounding)
+      const subtreeHeightMap: Record<string, number> = {};
+      const computeSubtreeHeight = (n: MindMapNode, depth: number): number => {
+        const ownHeight = getNodeSize(n, depth, 'classic-tree').height;
+        if (n.collapsed || !n.children || n.children.length === 0) {
+          subtreeHeightMap[n.id] = ownHeight;
+          return ownHeight;
+        }
+        let childrenTotalH = 0;
+        n.children.forEach((c, idx) => {
+          if (idx > 0) childrenTotalH += TREE_NODE_GAP;
+          childrenTotalH += computeSubtreeHeight(c, depth + 1);
+        });
+        const total = Math.max(ownHeight, childrenTotalH);
+        subtreeHeightMap[n.id] = total;
+        return total;
+      };
 
-        if (!node.collapsed && node.children && node.children.length > 0) {
+      computeSubtreeHeight(root, 0);
+
+      const placeNode = (n: MindMapNode, x: number, startY: number, depth: number) => {
+        const size = getNodeSize(n, depth, 'classic-tree');
+        posMap[n.id] = { x, y: startY, ...size, depth };
+
+        if (!n.collapsed && n.children && n.children.length > 0) {
           const childX = x + size.width + TREE_LEVEL_GAP;
           let childY = startY;
 
-          for (const child of node.children) {
+          for (const child of n.children) {
             edgeDefs.push({
-              sourceId: node.id,
+              sourceId: n.id,
               targetId: child.id,
               kind: 'branch-curve',
-              color: child.color || node.color || '#5A5A40',
+              color: child.color || n.color || '#5A5A40',
             });
-            build(child, childX, childY, depth + 1);
-            const childHeight = getNodeSize(child, depth + 1, 'classic-tree').height;
-            childY += childHeight + TREE_NODE_GAP;
+            placeNode(child, childX, childY, depth + 1);
+            const childSubtreeH =
+              subtreeHeightMap[child.id] ||
+              getNodeSize(child, depth + 1, 'classic-tree').height;
+            childY += childSubtreeH + TREE_NODE_GAP;
           }
         }
-      }
-      build(root, 60, 60, 0);
+      };
+
+      placeNode(root, 60, 60, 0);
     }
 
     // 4. Universal Safety Pass: Guarantee EVERY node in the tree has a distinct, non-overlapping slot!
@@ -783,6 +821,10 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   const { renderedNodes, renderedEdges, nodeMap } = useMemo(() => {
     const nodes: MindMapLayoutNode[] = [];
     const nMap: Record<string, MindMapLayoutNode> = {};
+
+    if (!root || !root.id) {
+      return { renderedNodes: [], renderedEdges: [], nodeMap: {} };
+    }
 
     function traverse(node: MindMapNode, depth: number) {
       const defaultPos = autoLayoutPositions.posMap[node.id] || {
@@ -1757,7 +1799,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
             zoom={zoom}
             layoutMode={layoutMode}
             saveStatus={saveStatus}
-            onToggleLayoutMode={() => setLayoutMode('timeline-flow')}
+            onToggleLayoutMode={(mode) => setLayoutMode(mode)}
           canUndo={historyIndex > 0}
           canRedo={historyIndex < history.length - 1}
           onUndo={handleUndo}

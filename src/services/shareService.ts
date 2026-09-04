@@ -69,8 +69,8 @@ export const shareService = {
     md += `📊 打包进度: ${packedItems}/${totalItems} (${Math.round((packedItems / (totalItems || 1)) * 100)}%)\n`;
     md += `⚖️ 背包总重: ${(totalGrams / 1000).toFixed(2)} kg (已打包 ${(packedGrams / 1000).toFixed(2)} kg)\n\n`;
 
-    list.customCategories.forEach((cat) => {
-      const catItems = list.items.filter((i) => i.categoryId === cat.id);
+    (list.customCategories || []).forEach((cat) => {
+      const catItems = (list.items || []).filter((i) => i.categoryId === cat.id);
       if (catItems.length === 0) return;
 
       const catWeight = catItems.reduce((s, i) => s + i.weightGrams * i.quantity, 0);
@@ -200,9 +200,9 @@ export const shareService = {
     ctx.fillText('装备分类概览与重点物品：', 40, currentY);
     currentY += 28;
 
-    const visibleCats = list.customCategories.slice(0, 6);
+    const visibleCats = (list.customCategories || []).slice(0, 6);
     visibleCats.forEach((cat) => {
-      const itemsInCat = list.items.filter((i) => i.categoryId === cat.id);
+      const itemsInCat = (list.items || []).filter((i) => i.categoryId === cat.id);
       if (itemsInCat.length === 0 || currentY > 960) return;
 
       const catWeight = itemsInCat.reduce((s, i) => s + i.weightGrams * i.quantity, 0);

@@ -361,11 +361,17 @@ export const storageService = {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          const totalItems = parsed.reduce(
+            (sum: number, l: any) => sum + (Array.isArray(l.items) ? l.items.length : 0),
+            0
+          );
+          if (totalItems > 0) {
+            return this.normalizeLists(parsed, userId);
+          }
         }
       }
 
-      // If empty for this user, populate based on templates
+      // If empty for this user or all cached lists have 0 items, populate based on full templates
       const seeded: HikingList[] = TEMPLATE_LISTS.map((tpl, idx) => ({
         id: `list-${userId}-${idx + 1}`,
         userId,
@@ -376,12 +382,35 @@ export const storageService = {
         isFavorite: idx === 0,
       }));
 
-      localStorage.setItem(key, JSON.stringify(seeded));
-      return seeded;
+      const normalized = this.normalizeLists(seeded, userId);
+      localStorage.setItem(key, JSON.stringify(normalized));
+      // Save to server
+      this.saveUserLists(userId, normalized);
+      return normalized;
     } catch (e) {
       console.error('Failed to get user lists:', e);
       return [];
     }
+  },
+
+  normalizeLists(lists: any[], userId: string): HikingList[] {
+    if (!Array.isArray(lists)) return [];
+    return lists.map((l, idx) => ({
+      id: l.id || `list-${userId}-${idx + 1}`,
+      userId: l.userId || userId,
+      title: l.title || '我的徒步清单',
+      destination: l.destination || '徒步路线',
+      trailType: l.trailType || 'multi_day',
+      durationDays: typeof l.durationDays === 'number' ? l.durationDays : 3,
+      customCategories:
+        Array.isArray(l.customCategories) && l.customCategories.length > 0
+          ? l.customCategories
+          : JSON.parse(JSON.stringify(DEFAULT_CATEGORIES)),
+      items: Array.isArray(l.items) ? l.items : [],
+      createdAt: l.createdAt || Date.now(),
+      updatedAt: l.updatedAt || Date.now(),
+      isFavorite: !!l.isFavorite,
+    }));
   },
 
   async fetchUserListsFromServer(userId: string): Promise<HikingList[]> {
@@ -389,27 +418,42 @@ export const storageService = {
       if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
         const res = await fetch(`/api/lists/${encodeURIComponent(userId)}`);
         if (res.ok) {
-          const serverLists: HikingList[] = await res.json();
+          const serverLists: any[] = await res.json();
           if (Array.isArray(serverLists) && serverLists.length > 0) {
-            const key = LISTS_PREFIX + userId;
-            localStorage.setItem(key, JSON.stringify(serverLists));
-            return serverLists;
-          } else if (Array.isArray(serverLists) && serverLists.length === 0) {
-            // If server has no lists for this user yet, check local cache
-            const key = LISTS_PREFIX + userId;
-            const localRaw = localStorage.getItem(key);
-            if (localRaw) {
-              const localLists: HikingList[] = JSON.parse(localRaw);
-              if (Array.isArray(localLists) && localLists.length > 0) {
-                this.saveUserLists(userId, localLists);
-                return localLists;
+            const totalItems = serverLists.reduce(
+              (sum: number, l: any) => sum + (Array.isArray(l.items) ? l.items.length : 0),
+              0
+            );
+            if (totalItems > 0) {
+              const normalized = this.normalizeLists(serverLists, userId);
+              const key = LISTS_PREFIX + userId;
+              localStorage.setItem(key, JSON.stringify(normalized));
+              return normalized;
+            }
+          }
+
+          // If server lists are empty or have 0 items, check if local has items
+          const key = LISTS_PREFIX + userId;
+          const localRaw = localStorage.getItem(key);
+          if (localRaw) {
+            const localLists = JSON.parse(localRaw);
+            if (Array.isArray(localLists) && localLists.length > 0) {
+              const totalItems = localLists.reduce(
+                (sum: number, l: any) => sum + (Array.isArray(l.items) ? l.items.length : 0),
+                0
+              );
+              if (totalItems > 0) {
+                const normalized = this.normalizeLists(localLists, userId);
+                this.saveUserLists(userId, normalized);
+                return normalized;
               }
             }
-            // If neither has lists, seed defaults and push to server
-            const defaultLists = this.getUserLists(userId);
-            this.saveUserLists(userId, defaultLists);
-            return defaultLists;
           }
+
+          // If neither has gear items, seed defaults from TEMPLATE_LISTS and push to server
+          const defaultLists = this.getUserLists(userId);
+          this.saveUserLists(userId, defaultLists);
+          return defaultLists;
         }
       }
     } catch (e) {

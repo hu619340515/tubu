@@ -327,7 +327,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   }}
                   className="text-xs text-[#5A5A40] hover:underline cursor-pointer"
                 >
-                  还没有专属账号？立即免费注册 $\rightarrow$
+                  还没有专属账号？立即免费注册 →
                 </button>
               </div>
             </form>
@@ -442,7 +442,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   }}
                   className="text-xs text-[#5A5A40] hover:underline cursor-pointer"
                 >
-                  已有账号？返回登录 $\rightarrow$
+                  已有账号？返回登录 →
                 </button>
               </div>
             </form>

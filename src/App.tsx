@@ -351,7 +351,7 @@ export default function App() {
       if (l.id !== activeList.id) return l;
       return {
         ...l,
-        customCategories: [...l.customCategories, category],
+        customCategories: [...(l.customCategories || []), category],
         updatedAt: Date.now(),
       };
     });
@@ -364,7 +364,7 @@ export default function App() {
       if (l.id !== activeList.id) return l;
       return {
         ...l,
-        customCategories: l.customCategories.map((cat) =>
+        customCategories: (l.customCategories || []).map((cat) =>
           cat.id === categoryId ? { ...cat, ...updates } : cat
         ),
         updatedAt: Date.now(),
@@ -379,9 +379,9 @@ export default function App() {
       if (l.id !== activeList.id) return l;
       return {
         ...l,
-        customCategories: l.customCategories.filter((cat) => cat.id !== categoryId),
+        customCategories: (l.customCategories || []).filter((cat) => cat.id !== categoryId),
         // reassign orphan items to first remaining category
-        items: l.items.filter((item) => item.categoryId !== categoryId),
+        items: (l.items || []).filter((item) => item.categoryId !== categoryId),
         updatedAt: Date.now(),
       };
     });
@@ -443,7 +443,7 @@ export default function App() {
   const filteredItems = useMemo(() => {
     if (!activeList) return [];
 
-    return activeList.items.filter((item) => {
+    return (activeList.items || []).filter((item) => {
       // 1. Search Query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
@@ -683,7 +683,7 @@ export default function App() {
 
             {/* Category Sections Grid / List */}
             <div className="space-y-4">
-              {activeList.customCategories.map((category) => {
+              {(activeList.customCategories || []).map((category) => {
                 const categoryItems = filteredItems.filter(
                   (item) => item.categoryId === category.id
                 );
@@ -835,7 +835,7 @@ export default function App() {
         <CategoryManagerModal
           isOpen={isCategoryOpen}
           onClose={() => setIsCategoryOpen(false)}
-          categories={activeList.customCategories}
+          categories={activeList.customCategories || []}
           onAddCategory={handleAddCategory}
           onUpdateCategory={handleUpdateCategory}
           onDeleteCategory={handleDeleteCategory}

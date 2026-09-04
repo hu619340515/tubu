@@ -74,12 +74,16 @@ export const MindMapToolbar: React.FC<MindMapToolbarProps> = ({
         <div className="flex items-center bg-[#FAF8F5] border border-[#D9D4C7] p-0.5 rounded-xl shadow-2xs shrink-0">
           <button
             type="button"
-            onClick={() => onToggleLayoutMode('timeline-flow')}
-            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg bg-[#5A5A40] text-white shadow-2xs transition"
-            title="思维导图（横向日期推进与纵向节点规划）"
+            onClick={() =>
+              onToggleLayoutMode(
+                layoutMode === 'timeline-flow' ? 'classic-tree' : 'timeline-flow'
+              )
+            }
+            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg bg-[#5A5A40] text-white shadow-2xs hover:bg-[#484833] transition"
+            title={`当前布局：${layoutMode === 'timeline-flow' ? '时间线流' : '经典树图'}，点击切换`}
           >
             <GitFork className="w-3.5 h-3.5" />
-            <span>思维导图</span>
+            <span>{layoutMode === 'timeline-flow' ? '时间线流' : '经典树图'}</span>
           </button>
         </div>
 
@@ -224,7 +228,7 @@ export const MindMapToolbar: React.FC<MindMapToolbarProps> = ({
           type="button"
           onClick={onAutoLayout}
           className="p-1.5 hover:bg-[#FAF8F5] border border-transparent hover:border-[#D9D4C7] text-[#5A5A40] rounded-xl transition flex items-center gap-1"
-          title="自动规整排版（重置自定义拖拽位置）"
+          title="自动规整排版（按层级整齐排布，避免重叠，支持Ctrl+Z撤销）"
         >
           <RotateCcw className="w-4 h-4" />
           <span className="hidden xl:inline text-[11px] font-bold">自动规整</span>

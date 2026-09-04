@@ -15,22 +15,23 @@ export const WeightStatsModal: React.FC<WeightStatsModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
-  const totalItems = list.items.length;
-  const packedItems = list.items.filter((i) => i.packed);
+  const itemsList = list.items || [];
+  const totalItems = itemsList.length;
+  const packedItems = itemsList.filter((i) => i.packed);
 
-  const totalWeightGrams = list.items.reduce((s, i) => s + i.weightGrams * i.quantity, 0);
+  const totalWeightGrams = itemsList.reduce((s, i) => s + i.weightGrams * i.quantity, 0);
   const packedWeightGrams = packedItems.reduce((s, i) => s + i.weightGrams * i.quantity, 0);
 
   // Worn weight vs Pack weight
-  const wornWeightGrams = list.items
+  const wornWeightGrams = itemsList
     .filter((i) => i.packLocation === 'worn')
     .reduce((s, i) => s + i.weightGrams * i.quantity, 0);
 
   const basePackWeightGrams = totalWeightGrams - wornWeightGrams;
 
   // Category weight breakdown
-  const categoryStats = list.customCategories.map((cat) => {
-    const items = list.items.filter((i) => i.categoryId === cat.id);
+  const categoryStats = (list.customCategories || []).map((cat) => {
+    const items = itemsList.filter((i) => i.categoryId === cat.id);
     const weight = items.reduce((s, i) => s + i.weightGrams * i.quantity, 0);
     const percent = totalWeightGrams > 0 ? (weight / totalWeightGrams) * 100 : 0;
     return {
