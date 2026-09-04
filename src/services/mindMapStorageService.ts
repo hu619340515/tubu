@@ -114,7 +114,7 @@ export const mindMapStorageService = {
           body: JSON.stringify({
             root,
             edges: edges || [],
-            layoutMode: layoutMode || 'tree',
+            layoutMode: layoutMode || 'timeline-flow',
             viewport: viewport || null,
           }),
         }).catch((e) => console.warn('[MindMapStorage] Cloud save error:', e));

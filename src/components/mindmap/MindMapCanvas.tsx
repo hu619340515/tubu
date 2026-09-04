@@ -263,8 +263,8 @@ function generateInitialEdges(rootNode: MindMapNode): MindMapEdge[] {
     .filter((c) => !c.detached)
     .forEach((modNode) => {
       edgeList.push({
-        id: `edge-${rootNode.id}-${modNode.id}`,
-        sourceId: rootNode.id,
+        id: `edge-${timelineBranch ? timelineBranch.id : rootNode.id}-${modNode.id}`,
+        sourceId: timelineBranch ? timelineBranch.id : rootNode.id,
         targetId: modNode.id,
         color: modNode.color || '#5A5A40',
         type: 'curve',
@@ -626,7 +626,10 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       }
 
       // Lay out Day Nodes horizontally in columns
-      const startColX = timelineBranch ? tlX + tlSize.width + 48 : 60;
+      const startColX = timelineBranch ? tlX + TIMELINE_COL_WIDTH + TIMELINE_COL_GAP : 60;
+      const colBottomY: Record<number, number> = {
+        0: tlY + tlSize.height,
+      };
 
       dayNodes.forEach((dateNode, colIdx) => {
         const dateSize = getNodeSize(dateNode, 2, 'timeline-flow');
@@ -677,52 +680,49 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
           });
         }
 
+        colBottomY[colIdx + 1] = prevY + prevH;
         if (prevY + prevH > maxColBottomY) {
           maxColBottomY = prevY + prevH;
         }
       });
 
-      // 3. Other Branches & Floating Cards (02检查, 03高反撤退, 04装备, and any floating cards)
+      // 3. Other Branches & Modules (02检查, 03高反撤退, 04装备)
+      // Exactly matching the target version: positioned directly under columns 0, 1, 2
       const dayNodeIdSet = new Set(dayNodes.map((d) => d.id));
       const otherBranches = (root.children || []).filter(
         (c) => c.id !== timelineBranch?.id && !dayNodeIdSet.has(c.id)
       );
 
       if (otherBranches.length > 0) {
-        let bottomY = maxColBottomY + 90;
-        let modX = 60;
-        let rowMaxH = 0;
+        const col0Bottom = colBottomY[0] || 220;
+        const col1Bottom = colBottomY[1] || 480;
+        const col2Bottom = colBottomY[2] || 480;
+        const baseBottomY = Math.max(col0Bottom, col1Bottom, col2Bottom, 480) + 56;
 
-        otherBranches.forEach((modNode) => {
+        otherBranches.forEach((modNode, modIdx) => {
           const modSize = getNodeSize(modNode, 1, 'timeline-flow');
-          const colWidth = Math.max(modSize.width, 240);
+          const modX = 60 + modIdx * (TIMELINE_COL_WIDTH + TIMELINE_COL_GAP);
+          const modY = baseBottomY;
 
-          // If line exceeds comfortable canvas width, wrap down to next row
-          if (modX > 60 && modX + colWidth > 2200) {
-            bottomY += rowMaxH + 60;
-            modX = 60;
-            rowMaxH = 0;
-          }
-
-          posMap[modNode.id] = { x: modX, y: bottomY, ...modSize, depth: 1 };
+          posMap[modNode.id] = { x: modX, y: modY, ...modSize, depth: 1 };
 
           if (!modNode.detached && !modNode.isFloating) {
             edgeDefs.push({
-              sourceId: root.id,
+              sourceId: timelineBranch ? timelineBranch.id : root.id,
               targetId: modNode.id,
               kind: 'branch-curve',
               color: modNode.color || '#5A5A40',
             });
           }
 
-          let prevY = bottomY;
+          let prevY = modY;
           let prevH = modSize.height;
           let prevId = modNode.id;
 
           if (!modNode.collapsed && modNode.children) {
             modNode.children.forEach((subItem) => {
               const subSize = getNodeSize(subItem, 2, 'timeline-flow');
-              const itemY = prevY + prevH + 20;
+              const itemY = prevY + prevH + 18;
 
               posMap[subItem.id] = { x: modX, y: itemY, ...subSize, depth: 2 };
 
@@ -738,13 +738,6 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
               prevH = subSize.height;
             });
           }
-
-          const branchTotalHeight = prevY + prevH - bottomY;
-          if (branchTotalHeight > rowMaxH) {
-            rowMaxH = branchTotalHeight;
-          }
-
-          modX += colWidth + 48;
         });
       }
     } else {
@@ -933,6 +926,9 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
     setPan({ x: Math.round(newPanX), y: Math.round(newPanY) });
   }, [renderedNodes]);
 
+  const handleFitViewRef = useRef(handleFitView);
+  handleFitViewRef.current = handleFitView;
+
   // Split-screen Route Map state (Left 40% Map, Right 60% Mind Map)
   const [isMapOpen, setIsMapOpen] = useState<boolean>(() => {
     try {
@@ -951,46 +947,57 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   const toggleMap = useCallback(() => {
     setIsMapOpen((prev) => {
       const next = !prev;
-      setTimeout(() => handleFitView(), 200);
+      setTimeout(() => handleFitViewRef.current(), 200);
       return next;
     });
-  }, [handleFitView]);
+  }, []);
 
-
-  // Auto-adapt when screen resolution or browser window size changes
+  // Auto-adapt when screen resolution or browser window size changes (DOM resize only)
   useEffect(() => {
     if (!containerRef.current) return;
     let timer: NodeJS.Timeout;
-    const ro = new ResizeObserver(() => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        handleFitView();
-      }, 80);
+    let prevW = containerRef.current.clientWidth;
+    let prevH = containerRef.current.clientHeight;
+
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      // ONLY trigger when the DOM container's dimensions physically changed by more than 10px
+      if (Math.abs(width - prevW) > 10 || Math.abs(height - prevH) > 10) {
+        prevW = width;
+        prevH = height;
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          handleFitViewRef.current();
+        }, 100);
+      }
     });
     ro.observe(containerRef.current);
     return () => {
       clearTimeout(timer);
       ro.disconnect();
     };
-  }, [handleFitView]);
+  }, []); // Run ONLY once on mount / unmount - NEVER rebind on node mutations!
 
   useEffect(() => {
     // 仅当用户未保存过自定义视口时才执行初始自动居中自适应，否则尊重用户调整过的缩放与平移
     const hasSaved = !!localStorage.getItem(`hike_mindmap_viewport_${listId}`);
     if (!hasSaved) {
-      const timer = setTimeout(() => handleFitView(), 120);
+      const timer = setTimeout(() => handleFitViewRef.current(), 150);
       return () => clearTimeout(timer);
     }
-  }, [listId, handleFitView]);
+  }, [listId]); // ONLY depend on listId, NEVER on handleFitView!
 
   // Reset to Clean Auto Layout (Clear Manual Positions & Apply Clean Grid)
   const handleAutoLayout = useCallback(() => {
     // 1. Clear individual node manual overrides
     const cleared = mindMapStorageService.clearAllPositions(root);
 
-    // 2. Unflag detached/floating on all nodes so auto-layout cleanly integrates all nodes
+    // 2. Unflag detached/floating and remove position on all nodes so auto-layout cleanly integrates all nodes
     const unflag = (n: MindMapNode): MindMapNode => ({
       ...n,
+      position: undefined,
       detached: false,
       isFloating: false,
       children: n.children?.map(unflag),
@@ -1002,9 +1009,20 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
     setSelectedNodeIds([]);
     setSelectedEdgeId(null);
 
-    pushState(cleanTree);
-    setTimeout(() => handleFitView(), 60);
-  }, [root, pushState, handleFitView]);
+    // 4. Force layoutMode to timeline-flow (the requested clean version)
+    setLayoutMode('timeline-flow');
+
+    // 5. Regenerate clean edges matching timeline layout
+    const freshEdges = generateInitialEdges(cleanTree);
+
+    // 6. Remove saved viewport so auto-layout fits cleanly once
+    try {
+      localStorage.removeItem(`hike_mindmap_viewport_${listId}`);
+    } catch (e) {}
+
+    pushState(cleanTree, freshEdges);
+    setTimeout(() => handleFitViewRef.current(), 60);
+  }, [root, listId, pushState]);
 
   // Node Dragging Handlers (Multi-Selection & Batch Dragging Support)
   const handleNodeMouseDown = (e: React.MouseEvent, nodeId: string) => {
@@ -2017,6 +2035,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
             return (
               <div
                 key={node.id}
+                data-node-id={node.id}
                 onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
                 onContextMenu={(e) => handleNodeContextMenu(e, node)}
                 onMouseUp={(e) => {
