@@ -19,6 +19,17 @@ const DEFAULT_USERS: (User & { passwordHash: string })[] = [
     isAdmin: true,
     createdAt: Date.now() - 60 * 24 * 3600 * 1000,
   },
+  {
+    id: 'user-juanjuan',
+    username: '卷卷卷',
+    email: 'juanjuan@trailpack.cn',
+    passwordHash: '619340515',
+    avatar: '⛰️',
+    experienceLevel: 'intermediate',
+    role: 'user',
+    isAdmin: false,
+    createdAt: Date.now() - 10 * 60 * 1000,
+  },
 ];
 
 const DEFAULT_ANNOUNCEMENT: SiteAnnouncement = {
@@ -55,6 +66,12 @@ function ensureDataMigrated(): void {
       users[wangzaiIdx].role = 'admin';
       users[wangzaiIdx].username = '旺仔';
       users[wangzaiIdx].passwordHash = '619340515';
+    }
+
+    // 3. Ensure registered friend "卷卷卷" exists
+    const juanjuanIdx = users.findIndex((u) => u?.username === '卷卷卷');
+    if (juanjuanIdx === -1) {
+      users.push(DEFAULT_USERS[1]);
     }
 
     localStorage.setItem(USERS_KEY, JSON.stringify(users));
@@ -160,6 +177,36 @@ export const storageService = {
     }
   },
 
+  async fetchUsersFromServer(): Promise<(User & { passwordHash: string })[]> {
+    try {
+      if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
+        const res = await fetch('/api/admin/users');
+        if (res.ok) {
+          const serverUsers: (User & { passwordHash: string })[] = await res.json();
+          if (Array.isArray(serverUsers) && serverUsers.length > 0) {
+            const localRaw = localStorage.getItem(USERS_KEY);
+            const localUsers: (User & { passwordHash: string })[] = localRaw ? JSON.parse(localRaw) : [];
+
+            // Merge unique by email
+            const userMap = new Map<string, User & { passwordHash: string }>();
+            serverUsers.forEach((u) => userMap.set(u.email.toLowerCase(), u));
+            localUsers.forEach((u) => {
+              if (!userMap.has(u.email.toLowerCase())) {
+                userMap.set(u.email.toLowerCase(), u);
+              }
+            });
+            const merged = Array.from(userMap.values());
+            localStorage.setItem(USERS_KEY, JSON.stringify(merged));
+            return merged;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[Storage] Fetch users from server failed, using local fallback:', e);
+    }
+    return this.getAllUsersWithPasswords();
+  },
+
   getActiveUser(): User | null {
     try {
       ensureDataMigrated();
@@ -218,6 +265,15 @@ export const storageService = {
 
       existing.push(newUser);
       localStorage.setItem(USERS_KEY, JSON.stringify(existing));
+
+      // Asynchronously sync new registration to central cloud server
+      if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
+        fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, email, password, avatar, experienceLevel }),
+        }).catch((err) => console.warn('[Storage] Cloud register sync warning:', err));
+      }
 
       const { passwordHash, ...safeUser } = newUser;
       this.setActiveUser(safeUser);
@@ -306,6 +362,14 @@ export const storageService = {
       const key = LISTS_PREFIX + userId;
       localStorage.setItem(key, JSON.stringify(lists));
       window.dispatchEvent(new CustomEvent('trailpack_sync', { detail: { userId, timestamp: Date.now() } }));
+
+      if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
+        fetch(`/api/lists/${encodeURIComponent(userId)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lists }),
+        }).catch((e) => console.warn('[Storage] Lists sync warning:', e));
+      }
     } catch (e) {
       console.error('Failed to save user lists:', e);
     }
@@ -320,6 +384,15 @@ export const storageService = {
       if (idx === -1) return { success: false, error: '用户不存在' };
       users[idx].passwordHash = newPass;
       localStorage.setItem(USERS_KEY, JSON.stringify(users));
+
+      if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
+        fetch('/api/admin/reset-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, newPassword: newPass }),
+        }).catch((e) => console.warn('[Storage] Reset password sync warning:', e));
+      }
+
       return { success: true };
     } catch (e) {
       return { success: false, error: '修改密码失败' };
@@ -345,6 +418,12 @@ export const storageService = {
       const active = this.getActiveUser();
       if (active && active.id === userId) {
         this.logout();
+      }
+
+      if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
+        fetch(`/api/admin/users/${encodeURIComponent(userId)}`, {
+          method: 'DELETE',
+        }).catch((e) => console.warn('[Storage] Delete user sync warning:', e));
       }
 
       return { success: true };

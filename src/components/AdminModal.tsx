@@ -57,11 +57,22 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     setTimeout(() => setFeedback(null), 3000);
   };
 
-  const reloadData = () => {
+  const reloadData = async () => {
+    // 1. Immediately display local cached users and lists
     setUsers(storageService.getAllUsersWithPasswords());
     setSystemLists(storageService.getAllSystemLists());
     setStorageUsage(storageService.getStorageUsage());
     setAnnouncement(storageService.getSiteAnnouncement());
+
+    // 2. Fetch real-time live users from server database across all devices
+    try {
+      const liveUsers = await storageService.fetchUsersFromServer();
+      if (liveUsers && liveUsers.length > 0) {
+        setUsers(liveUsers);
+      }
+    } catch (e) {
+      // offline fallback to local
+    }
   };
 
   useEffect(() => {

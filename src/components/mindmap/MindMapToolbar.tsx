@@ -121,7 +121,7 @@ export const MindMapToolbar: React.FC<MindMapToolbarProps> = ({
           title="打开行程导图模版库"
         >
           <Sparkles className="w-3.5 h-3.5 text-[#D95D39]" />
-          <span className="hidden sm:inline">模版预置</span>
+          <span className="hidden sm:inline">模版预设</span>
         </button>
 
         {/* Presets Selection Modal */}

@@ -291,6 +291,18 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
     mindMapStorageService.getMindMap(listId, listTitle, destination)
   );
 
+  // Keep root title in sync when user edits the list title in header
+  useEffect(() => {
+    if (listTitle && root && root.title !== listTitle) {
+      setRoot((prev) => {
+        if (prev.title === listTitle) return prev;
+        const updated = { ...prev, title: listTitle };
+        mindMapStorageService.saveMindMap(listId, updated);
+        return updated;
+      });
+    }
+  }, [listTitle, listId]);
+
   // Dedicated Edges State (100% Reliable Connection Line Management)
   const [edges, setEdges] = useState<MindMapEdge[]>(() => {
     try {

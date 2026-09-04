@@ -54,7 +54,7 @@ export const MindMapPresetsModal: React.FC<MindMapPresetsModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === 'undefined') return null;
 
   const handleApply = (presetId: string) => {
     onSelectPreset(presetId);
@@ -204,6 +204,7 @@ export const MindMapPresetsModal: React.FC<MindMapPresetsModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

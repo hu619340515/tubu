@@ -15,6 +15,9 @@ import {
   CloudSun,
   AlertCircle,
   ExternalLink,
+  Edit3,
+  Check,
+  X,
 } from 'lucide-react';
 
 import { User, HikingList, GearItem, Category, TrailType, SiteAnnouncement } from './types';
@@ -78,6 +81,8 @@ export default function App() {
   // 5. In-List Filters
   const [filterMode, setFilterMode] = useState<'all' | 'unpacked' | 'essential'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isEditingMindMapTitle, setIsEditingMindMapTitle] = useState(false);
+  const [mindMapEditTitle, setMindMapEditTitle] = useState('');
 
   // 6. Shared Banner (when opened via #share=...)
   const [sharedBanner, setSharedBanner] = useState<{
@@ -553,16 +558,65 @@ export default function App() {
                     <GitFork className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </span>
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-xs sm:text-sm md:text-base font-bold text-[#2C2C2C] truncate">
-                        {activeList.title} · 行程规划思维导图
-                      </h2>
-                      {activeList.durationDays && (
-                        <span className="text-[10px] font-bold px-1.5 sm:px-2 py-0.5 bg-[#EAE7DF] text-[#5A5A40] rounded-full shrink-0">
-                          {activeList.durationDays} 天行程
-                        </span>
-                      )}
-                    </div>
+                    {isEditingMindMapTitle ? (
+                      <form
+                        className="flex items-center gap-1.5 py-0.5"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const val = mindMapEditTitle.trim();
+                          if (val && activeList) {
+                            handleUpdateListDetails(activeList.id, { title: val });
+                          }
+                          setIsEditingMindMapTitle(false);
+                        }}
+                      >
+                        <input
+                          type="text"
+                          autoFocus
+                          value={mindMapEditTitle}
+                          onChange={(e) => setMindMapEditTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') setIsEditingMindMapTitle(false);
+                          }}
+                          className="px-2.5 py-1 text-xs sm:text-sm font-bold text-[#2C2C2C] bg-white border border-[#5A5A40] rounded-lg shadow-inner outline-none focus:ring-2 focus:ring-[#5A5A40]/30 min-w-[200px] sm:min-w-[280px]"
+                          placeholder="输入行程全案标题..."
+                        />
+                        <button
+                          type="submit"
+                          title="保存标题"
+                          className="p-1 sm:p-1.5 bg-[#5A5A40] hover:bg-[#484833] text-white rounded-lg transition cursor-pointer shrink-0"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          title="取消"
+                          onClick={() => setIsEditingMindMapTitle(false)}
+                          className="p-1 sm:p-1.5 bg-[#EAE7DF] hover:bg-[#D9D4C7] text-[#7A7465] rounded-lg transition cursor-pointer shrink-0"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </form>
+                    ) : (
+                      <div className="flex items-center gap-2 group/title">
+                        <h2
+                          className="text-xs sm:text-sm md:text-base font-bold text-[#2C2C2C] truncate cursor-pointer hover:text-[#5A5A40] transition flex items-center gap-1.5"
+                          title="点击编辑标题"
+                          onClick={() => {
+                            setMindMapEditTitle(activeList.title);
+                            setIsEditingMindMapTitle(true);
+                          }}
+                        >
+                          <span>{activeList.title} · 行程规划思维导图</span>
+                          <Edit3 className="w-3.5 h-3.5 text-[#7A7465] opacity-60 group-hover/title:opacity-100 transition shrink-0" />
+                        </h2>
+                        {activeList.durationDays && (
+                          <span className="text-[10px] font-bold px-1.5 sm:px-2 py-0.5 bg-[#EAE7DF] text-[#5A5A40] rounded-full shrink-0">
+                            {activeList.durationDays} 天行程
+                          </span>
+                        )}
+                      </div>
+                    )}
                     <p className="text-[10px] sm:text-[11px] text-[#7A7465] hidden md:block">
                       横向日期线性推进 · 当日事项纵向串联 · 支持卡片自由拖拽平移、框选多选、拉线连接与防重叠自动整理
                     </p>
