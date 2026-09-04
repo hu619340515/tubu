@@ -47,7 +47,7 @@ function ensureDataMigrated(): void {
     );
 
     // 2. Ensure administrator "旺仔" exists with admin privileges and correct credentials
-    const wangzaiIdx = users.findIndex((u) => u.email.toLowerCase() === '619340515@qq.com');
+    const wangzaiIdx = users.findIndex((u) => u?.email?.toLowerCase() === '619340515@qq.com');
     if (wangzaiIdx === -1) {
       users.unshift(DEFAULT_USERS[0]);
     } else {

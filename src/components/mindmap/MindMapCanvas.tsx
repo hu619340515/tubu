@@ -902,16 +902,16 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
 
       if (matchedNode) {
         setSelectedNodeIds([matchedNode.id]);
-        const pos = nodePositions[matchedNode.id];
-        if (pos && containerRef.current) {
+        const targetNode = renderedNodes.find((n) => n.data.id === matchedNode!.id);
+        if (targetNode && containerRef.current) {
           const rect = containerRef.current.getBoundingClientRect();
-          const targetPanX = rect.width / 2 - (pos.x + pos.width / 2) * zoom;
-          const targetPanY = rect.height / 2 - (pos.y + pos.height / 2) * zoom;
+          const targetPanX = rect.width / 2 - (targetNode.x + targetNode.width / 2) * zoom;
+          const targetPanY = rect.height / 2 - (targetNode.y + targetNode.height / 2) * zoom;
           setPan({ x: Math.round(targetPanX), y: Math.round(targetPanY) });
         }
       }
     },
-    [root, nodePositions, zoom]
+    [root, renderedNodes, zoom]
   );
 
   // Sync selected node to route map
