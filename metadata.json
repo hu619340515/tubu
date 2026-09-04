@@ -1,5 +1,5 @@
 {
-  "name": "徒步物品清单检查站",
+  "name": "溜个弯",
   "description": "专业的徒步装备检查与打包管理工具，支持多用户专属清单、离线检查打卡、社交分享、自定义分类标签与徒步目的地天气预报查询。",
   "requestFramePermissions": ["geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

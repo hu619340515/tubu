@@ -85,7 +85,7 @@ export const shareService = {
       md += `\n`;
     });
 
-    md += `🔗 由【徒步物品清单检查站】整理生成，支持离线打卡与天气查询。`;
+    md += `🔗 由【溜个弯】整理生成，支持离线打卡与天气查询。`;
     return md;
   },
 
@@ -244,7 +244,7 @@ export const shareService = {
 
     ctx.fillStyle = '#D27D59';
     ctx.font = 'bold 15px Georgia, serif';
-    ctx.fillText('🌲 徒步物品清单检查站 · 无网络亦支持离线打卡与装备核验', 40, 1060);
+    ctx.fillText('🌲 溜个弯 · 无网络亦支持离线打卡与装备核验', 40, 1060);
 
     ctx.fillStyle = '#A8A295';
     ctx.font = '13px sans-serif';

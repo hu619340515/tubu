@@ -62,7 +62,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-base sm:text-lg font-serif font-bold tracking-tight text-[#2C2C2C]">
-                徒步物品清单检查站
+                溜个弯
               </h1>
               {!isOnline && (
                 <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider bg-[#FDF2F0] text-[#D27D59] border border-[#D27D59]/30 px-2 py-0.5 rounded-full">

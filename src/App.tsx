@@ -709,7 +709,7 @@ export default function App() {
                 专属清单库为空
               </h2>
               <p className="text-xs text-[#7A7465] mt-1 max-w-sm mx-auto">
-                欢迎来到【徒步物品清单检查站】！您可以立即从经典路线模版创建，或自由从零规划您的下一趟山野行囊。
+                欢迎来到【溜个弯】！您可以立即从经典路线模版创建，或自由从零规划您的下一趟山野行囊。
               </p>
             </div>
             <button

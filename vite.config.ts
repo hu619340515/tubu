@@ -14,9 +14,9 @@ export default defineConfig(() => {
         includeAssets: ['icon.svg', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png'],
         manifest: {
           id: '/',
-          name: '徒步物品清单检查站',
-          short_name: '徒步清单',
-          description: '专业的徒步装备检查与打包管理工具，支持离线打卡、天气查询与社交分享。',
+          name: '溜个弯',
+          short_name: '溜个弯',
+          description: '溜个弯 - 专业的徒步装备检查与打包管理工具，支持离线打卡、天气查询与社交分享。',
           theme_color: '#064e3b',
           background_color: '#f8fafc',
           display: 'standalone',
