@@ -318,7 +318,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       const saved = localStorage.getItem(`hike_edges_${listId}`);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     } catch (e) {}
     return generateInitialEdges(root);
@@ -625,18 +625,55 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
         });
       }
 
-      // Lay out Day Nodes horizontally in columns
+      // Lay out Day Nodes horizontally in columns with UNIFIED grid row alignment
       const startColX = timelineBranch ? tlX + TIMELINE_COL_WIDTH + TIMELINE_COL_GAP : 60;
       const colBottomY: Record<number, number> = {
         0: tlY + tlSize.height,
       };
 
+      // 1. Calculate max height among all date headers so row 0 starts at identical Y
+      let maxDateHeaderHeight = 54;
+      dayNodes.forEach((d) => {
+        const sz = getNodeSize(d, 2, 'timeline-flow');
+        if (sz.height > maxDateHeaderHeight) {
+          maxDateHeaderHeight = sz.height;
+        }
+      });
+
+      // 2. Find max row count across all days
+      let maxEventRows = 0;
+      dayNodes.forEach((d) => {
+        const count = (!d.collapsed && d.children) ? d.children.length : 0;
+        if (count > maxEventRows) maxEventRows = count;
+      });
+
+      // 3. Find max height for each row index r across all days
+      const maxRowHeights: number[] = [];
+      for (let r = 0; r < maxEventRows; r++) {
+        let maxH = 54;
+        dayNodes.forEach((d) => {
+          if (!d.collapsed && d.children && d.children[r]) {
+            const sz = getNodeSize(d.children[r], 3, 'timeline-flow');
+            if (sz.height > maxH) maxH = sz.height;
+          }
+        });
+        maxRowHeights[r] = maxH;
+      }
+
+      // 4. Compute uniform row Y coordinates across ALL daily columns
+      const eventRowY: number[] = [];
+      let currentEventY = tlY + maxDateHeaderHeight + TIMELINE_ROW_GAP;
+      for (let r = 0; r < maxEventRows; r++) {
+        eventRowY[r] = currentEventY;
+        currentEventY += maxRowHeights[r] + TIMELINE_ROW_GAP;
+      }
+
       dayNodes.forEach((dateNode, colIdx) => {
         const dateSize = getNodeSize(dateNode, 2, 'timeline-flow');
         const thisColX = startColX + colIdx * (TIMELINE_COL_WIDTH + TIMELINE_COL_GAP);
-        let currentY = tlY;
 
-        posMap[dateNode.id] = { x: thisColX, y: currentY, ...dateSize, depth: 2 };
+        // Every date header aligns on tlY
+        posMap[dateNode.id] = { x: thisColX, y: tlY, ...dateSize, depth: 2 };
 
         if (timelineBranch && colIdx === 0) {
           edgeDefs.push({
@@ -656,16 +693,14 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
         }
 
         let prevId = dateNode.id;
-        let prevY = currentY;
-        let prevH = dateSize.height;
 
-        // Vertical Events under this Date
+        // Vertical Events under this Date aligned to uniform grid rows
         if (!dateNode.collapsed && dateNode.children) {
-          dateNode.children.forEach((eventNode) => {
+          dateNode.children.forEach((eventNode, r) => {
             const eventSize = getNodeSize(eventNode, 3, 'timeline-flow');
-            currentY = prevY + prevH + TIMELINE_ROW_GAP;
+            const thisY = eventRowY[r];
 
-            posMap[eventNode.id] = { x: thisColX, y: currentY, ...eventSize, depth: 3 };
+            posMap[eventNode.id] = { x: thisColX, y: thisY, ...eventSize, depth: 3 };
 
             edgeDefs.push({
               sourceId: prevId,
@@ -675,14 +710,16 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
             });
 
             prevId = eventNode.id;
-            prevY = currentY;
-            prevH = eventSize.height;
           });
         }
 
-        colBottomY[colIdx + 1] = prevY + prevH;
-        if (prevY + prevH > maxColBottomY) {
-          maxColBottomY = prevY + prevH;
+        const lastRowIdx = (!dateNode.collapsed && dateNode.children) ? dateNode.children.length - 1 : -1;
+        const colBottom = lastRowIdx >= 0
+          ? eventRowY[lastRowIdx] + maxRowHeights[lastRowIdx]
+          : tlY + maxDateHeaderHeight;
+        colBottomY[colIdx + 1] = colBottom;
+        if (colBottom > maxColBottomY) {
+          maxColBottomY = colBottom;
         }
       });
 

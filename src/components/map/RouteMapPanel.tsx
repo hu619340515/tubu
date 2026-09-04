@@ -196,6 +196,42 @@ export const RouteMapPanelComponent: React.FC<RouteMapPanelProps> = ({
     };
   }, []);
 
+  // Global bulletproof click listener for popup photo lightbox (Capture phase)
+  useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      const trigger = (e.target as HTMLElement)?.closest('.popup-lightbox-trigger') as HTMLElement | null;
+      if (trigger) {
+        e.preventDefault();
+        e.stopPropagation();
+        const url = trigger.getAttribute('data-img-url');
+        if (url) {
+          const descRaw = trigger.getAttribute('data-img-desc');
+          let desc = '';
+          if (descRaw) {
+            try {
+              desc = decodeURIComponent(descRaw);
+            } catch {
+              desc = descRaw;
+            }
+          }
+          setLightboxImage({
+            url,
+            title: trigger.getAttribute('data-img-title') || '',
+            time: trigger.getAttribute('data-img-time') || undefined,
+            ele: trigger.getAttribute('data-img-ele') ? Number(trigger.getAttribute('data-img-ele')) : undefined,
+            distFromStartKm: trigger.getAttribute('data-img-start') ? Number(trigger.getAttribute('data-img-start')) : undefined,
+            distToEndKm: trigger.getAttribute('data-img-end') ? Number(trigger.getAttribute('data-img-end')) : undefined,
+            description: desc || undefined,
+          });
+        }
+      }
+    };
+    document.addEventListener('click', handleGlobalClick, true);
+    return () => {
+      document.removeEventListener('click', handleGlobalClick, true);
+    };
+  }, []);
+
   // Switch Base Map Layer
   useEffect(() => {
     const map = mapInstanceRef.current;
@@ -316,6 +352,15 @@ export const RouteMapPanelComponent: React.FC<RouteMapPanelProps> = ({
               ? `
                 <div
                   id="${imgId}"
+                  class="popup-lightbox-trigger cursor-pointer"
+                  data-wpt-id="${wpt.id}"
+                  data-img-url="${wpt.imageUrl}"
+                  data-img-title="${cleanName || wpt.name}"
+                  data-img-time="${wpt.time || ''}"
+                  data-img-ele="${wpt.ele || ''}"
+                  data-img-start="${wpt.distFromStartKm ?? ''}"
+                  data-img-end="${wpt.distToEndKm ?? ''}"
+                  data-img-desc="${wpt.description ? encodeURIComponent(wpt.description) : ''}"
                   style="
                     margin-bottom: 8px;
                     position: relative;
@@ -395,22 +440,30 @@ export const RouteMapPanelComponent: React.FC<RouteMapPanelProps> = ({
       `;
 
       marker.bindPopup(popupHtml);
-      marker.on('popupopen', () => {
+      marker.on('popupopen', (ev: any) => {
         setSelectedWaypoint(wpt);
-        const imgEl = document.getElementById(imgId);
-        if (imgEl && wpt.imageUrl) {
-          imgEl.onclick = (e) => {
-            e.stopPropagation();
-            setLightboxImage({
-              url: wpt.imageUrl!,
-              title: cleanName || wpt.name,
-              time: wpt.time,
-              ele: wpt.ele,
-              distFromStartKm: wpt.distFromStartKm,
-              distToEndKm: wpt.distToEndKm,
-              description: wpt.description,
-            });
-          };
+        const popupNode = ev.popup?.getElement?.() || document.getElementById(imgId);
+        if (popupNode && wpt.imageUrl) {
+          const trigger = (popupNode.classList?.contains('popup-lightbox-trigger')
+            ? popupNode
+            : popupNode.querySelector?.('.popup-lightbox-trigger')) as HTMLElement | null;
+          if (trigger) {
+            const openModal = (e: Event) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setLightboxImage({
+                url: wpt.imageUrl!,
+                title: cleanName || wpt.name,
+                time: wpt.time,
+                ele: wpt.ele,
+                distFromStartKm: wpt.distFromStartKm,
+                distToEndKm: wpt.distToEndKm,
+                description: wpt.description,
+              });
+            };
+            trigger.onclick = openModal;
+            L.DomEvent.on(trigger, 'click', openModal);
+          }
         }
       });
 
