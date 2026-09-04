@@ -17,7 +17,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 
-import { User, HikingList, GearItem, Category, TrailType } from './types';
+import { User, HikingList, GearItem, Category, TrailType, SiteAnnouncement } from './types';
 import { storageService } from './services/storageService';
 import { shareService } from './services/shareService';
 import { Navbar, ActiveViewMode } from './components/Navbar';
@@ -29,35 +29,51 @@ import { CategoryManagerModal } from './components/CategoryManagerModal';
 import { WeightStatsModal } from './components/WeightStatsModal';
 import { NewListModal } from './components/NewListModal';
 import { AuthModal } from './components/AuthModal';
+import { AdminModal } from './components/AdminModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { MindMapCanvas } from './components/mindmap/MindMapCanvas';
-import { GitFork } from 'lucide-react';
+import { GitFork, Radio } from 'lucide-react';
 
 export default function App() {
-  // 1. User Account State
-  const [currentUser, setCurrentUser] = useState<User>(() => storageService.getActiveUser());
+  // 1. User Account State (null means not logged in)
+  const [currentUser, setCurrentUser] = useState<User | null>(() => storageService.getActiveUser());
 
   // 1.1 Active View Mode ('mindmap' | 'checklist')
   const [activeView, setActiveView] = useState<ActiveViewMode>('mindmap');
 
   // 2. User's Personal Lists
   const [lists, setLists] = useState<HikingList[]>(() =>
-    storageService.getUserLists(currentUser.id)
+    currentUser ? storageService.getUserLists(currentUser.id) : []
   );
 
   // 3. Active List ID
   const [activeListId, setActiveListId] = useState<string>(() => {
+    if (!currentUser) return '';
     const userLists = storageService.getUserLists(currentUser.id);
     return userLists.length > 0 ? userLists[0].id : '';
   });
 
   // 4. Modals State
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isWeatherOpen, setIsWeatherOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
   const [isWeightOpen, setIsWeightOpen] = useState(false);
   const [isNewListOpen, setIsNewListOpen] = useState(false);
+
+  // 4.1 Site Announcement State
+  const [announcement, setAnnouncement] = useState<SiteAnnouncement>(() =>
+    storageService.getSiteAnnouncement()
+  );
+
+  useEffect(() => {
+    const handleAnnouncementUpdate = () => {
+      setAnnouncement(storageService.getSiteAnnouncement());
+    };
+    window.addEventListener('trailpack_announcement_update', handleAnnouncementUpdate);
+    return () => window.removeEventListener('trailpack_announcement_update', handleAnnouncementUpdate);
+  }, []);
 
   // 5. In-List Filters
   const [filterMode, setFilterMode] = useState<'all' | 'unpacked' | 'essential'>('all');
@@ -74,9 +90,11 @@ export default function App() {
   const saveLists = useCallback(
     (newLists: HikingList[]) => {
       setLists(newLists);
-      storageService.saveUserLists(currentUser.id, newLists);
+      if (currentUser) {
+        storageService.saveUserLists(currentUser.id, newLists);
+      }
     },
-    [currentUser.id]
+    [currentUser]
   );
 
   // Handle URL hash sharing when page loads
@@ -104,7 +122,18 @@ export default function App() {
     } else {
       setActiveListId('');
     }
+    setIsAuthOpen(false);
   };
+
+  // Safe logout handler
+  const handleLogout = useCallback(() => {
+    if (confirm('确定要退出当前登录账号吗？')) {
+      storageService.logout();
+      setCurrentUser(null);
+      setLists([]);
+      setActiveListId('');
+    }
+  }, []);
 
   // Find active list
   const activeList = useMemo(() => {
@@ -396,6 +425,40 @@ export default function App() {
     });
   }, [activeList, searchQuery, filterMode]);
 
+  // Mandatory Login Barrier: If not logged in on first open, require login
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-[#F5F2EB] flex flex-col justify-between selection:bg-[#5A5A40] selection:text-white">
+        <Navbar
+          currentUser={null}
+          lists={[]}
+          activeListId=""
+          activeView="mindmap"
+          onSelectView={() => {}}
+          onSelectList={() => {}}
+          onOpenNewList={() => {}}
+          onOpenAuth={() => setIsAuthOpen(true)}
+          onOpenWeather={() => setIsWeatherOpen(true)}
+        />
+        <div className="flex-1 flex items-center justify-center p-4">
+          <AuthModal
+            isOpen={true}
+            onClose={() => {}}
+            currentUser={null}
+            onUserChanged={handleUserChanged}
+            isMandatory={true}
+          />
+        </div>
+        {/* Weather Forecast Modal (Can still be previewed) */}
+        <WeatherModal
+          isOpen={isWeatherOpen}
+          onClose={() => setIsWeatherOpen(false)}
+          destination="四川·格聂神山大环线"
+        />
+      </div>
+    );
+  }
+
   return (
     <div
       className={`min-h-screen bg-[#F5F5F0] text-[#2C2C2C] flex flex-col font-sans selection:bg-[#5A5A40] selection:text-white ${
@@ -413,9 +476,30 @@ export default function App() {
         onOpenNewList={() => setIsNewListOpen(true)}
         onOpenAuth={() => setIsAuthOpen(true)}
         onOpenWeather={() => setIsWeatherOpen(true)}
+        onOpenAdmin={() => setIsAdminOpen(true)}
+        onLogout={handleLogout}
       />
 
-      {/* 2. Shared Link Imported Banner (if opened from social share URL) */}
+      {/* 2. Site Announcement Banner */}
+      {announcement.enabled && (
+        <div
+          className={`w-full px-4 py-2 sm:px-6 flex items-center justify-between text-xs transition border-b ${
+            announcement.type === 'alert'
+              ? 'bg-[#FDF2F0] text-[#D27D59] border-[#D27D59]/30'
+              : announcement.type === 'warning'
+              ? 'bg-[#FEF7EA] text-[#B7791F] border-[#B7791F]/30'
+              : 'bg-[#EBF3E8] text-[#3D6B35] border-[#3D6B35]/30'
+          }`}
+        >
+          <div className="flex items-center gap-2 max-w-7xl mx-auto flex-1">
+            <Radio className="w-4 h-4 shrink-0 animate-pulse text-[#D27D59]" />
+            <span className="font-bold shrink-0">【{announcement.title}】</span>
+            <span className="truncate">{announcement.content}</span>
+          </div>
+        </div>
+      )}
+
+      {/* 2.1 Shared Link Imported Banner (if opened from social share URL) */}
       {sharedBanner && (
         <div className="bg-[#5A5A40] text-white px-4 py-3 border-b border-[#484833] shadow-md">
           <div className="w-full px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -697,6 +781,18 @@ export default function App() {
         onClose={() => setIsAuthOpen(false)}
         currentUser={currentUser}
         onUserChanged={handleUserChanged}
+      />
+
+      {/* Admin Management Console Modal */}
+      <AdminModal
+        isOpen={isAdminOpen}
+        onClose={() => setIsAdminOpen(false)}
+        currentUser={currentUser}
+        onUserListsChanged={() => {
+          if (currentUser) {
+            setLists(storageService.getUserLists(currentUser.id));
+          }
+        }}
       />
 
       {/* 5. Persistent Non-intrusive Offline Indicator */}

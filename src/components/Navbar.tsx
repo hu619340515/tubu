@@ -17,8 +17,10 @@ import { usePWAInstall } from '../hooks/usePWAInstall';
 
 export type ActiveViewMode = 'checklist' | 'mindmap';
 
+import { ShieldCheck, LogOut } from 'lucide-react';
+
 interface NavbarProps {
-  currentUser: User;
+  currentUser: User | null;
   lists: HikingList[];
   activeListId: string;
   activeView: ActiveViewMode;
@@ -27,6 +29,8 @@ interface NavbarProps {
   onOpenNewList: () => void;
   onOpenAuth: () => void;
   onOpenWeather: () => void;
+  onOpenAdmin?: () => void;
+  onLogout?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -39,6 +43,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenNewList,
   onOpenAuth,
   onOpenWeather,
+  onOpenAdmin,
+  onLogout,
 }) => {
   const isOnline = useOnlineStatus();
   const { isInstallable, install } = usePWAInstall();
@@ -155,23 +161,64 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           )}
 
-          {/* User Account Button */}
-          <button
-            type="button"
-            onClick={onOpenAuth}
-            className="flex items-center gap-2 pl-2 pr-3 py-1.5 bg-white hover:bg-[#F0EEE8] border border-[#D9D4C7] rounded-xl transition group shadow-2xs"
-            title="切换或管理专属账户"
-          >
-            <span className="text-base leading-none p-1 bg-[#EAE7DF] rounded-lg group-hover:scale-105 transition">
-              {currentUser.avatar || '🏔️'}
-            </span>
-            <div className="text-left hidden sm:block">
-              <p className="text-xs font-bold text-[#2C2C2C] truncate max-w-[90px]">
-                {currentUser.username}
-              </p>
-              <p className="text-[10px] text-[#5A5A40] font-semibold">专属清单</p>
+          {/* Admin Dashboard Button (Only for admin) */}
+          {currentUser?.isAdmin && (
+            <button
+              type="button"
+              onClick={onOpenAdmin}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#D27D59] hover:bg-[#be6e4c] text-white text-xs font-bold transition shadow-xs"
+              title="打开网站管理控制台"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">管理后台</span>
+            </button>
+          )}
+
+          {/* User Account Button or Login Button */}
+          {currentUser ? (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={onOpenAuth}
+                className="flex items-center gap-2 pl-2 pr-3 py-1.5 bg-white hover:bg-[#F0EEE8] border border-[#D9D4C7] rounded-xl transition group shadow-2xs"
+                title="切换或管理专属账户"
+              >
+                <span className="text-base leading-none p-1 bg-[#EAE7DF] rounded-lg group-hover:scale-105 transition">
+                  {currentUser.avatar || '🏔️'}
+                </span>
+                <div className="text-left hidden sm:block">
+                  <div className="flex items-center gap-1">
+                    <p className="text-xs font-bold text-[#2C2C2C] truncate max-w-[85px]">
+                      {currentUser.username}
+                    </p>
+                    {currentUser.isAdmin && (
+                      <span className="text-[9px] bg-[#D27D59] text-white px-1 py-0.1 rounded font-bold">
+                        管
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-[#5A5A40] font-semibold">专属空间</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={onLogout}
+                className="p-2 text-[#7A7465] hover:text-red-600 hover:bg-[#FAF8F5] rounded-xl transition border border-[#D9D4C7] bg-white shadow-2xs"
+                title="退出当前登录"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
             </div>
-          </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onOpenAuth}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#5A5A40] hover:bg-[#484833] text-white text-xs font-bold rounded-xl shadow-xs transition"
+            >
+              <span>登录账号</span>
+            </button>
+          )}
         </div>
       </div>
     </header>

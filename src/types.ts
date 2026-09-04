@@ -4,7 +4,18 @@ export interface User {
   email: string;
   avatar: string;
   experienceLevel?: 'rookie' | 'intermediate' | 'expert';
+  role?: 'admin' | 'user';
+  isAdmin?: boolean;
   createdAt: number;
+}
+
+export interface SiteAnnouncement {
+  id: string;
+  enabled: boolean;
+  title: string;
+  content: string;
+  type: 'info' | 'warning' | 'alert';
+  updatedAt: number;
 }
 
 export interface Category {

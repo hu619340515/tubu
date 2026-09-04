@@ -310,8 +310,14 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   const [history, setHistory] = useState<Snapshot[]>([{ root, edges }]);
   const [historyIndex, setHistoryIndex] = useState(0);
 
-  // Layout Mode: 'timeline-flow' (default) or 'classic-tree'
-  const [layoutMode, setLayoutMode] = useState<MindMapLayoutMode>('timeline-flow');
+  // Layout Mode: 'timeline-flow' (default) or 'classic-tree' with persistent storage
+  const [layoutMode, setLayoutMode] = useState<MindMapLayoutMode>(() => {
+    try {
+      const saved = localStorage.getItem(`hike_mindmap_layoutmode_${listId}`);
+      if (saved === 'timeline-flow' || saved === 'classic-tree') return saved;
+    } catch (e) {}
+    return 'timeline-flow';
+  });
 
   // Selected Node & Edge State (Supports Box Selection & Multi-Selection)
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
@@ -349,11 +355,53 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   } | null>(null);
   const [isSpacePressed, setIsSpacePressed] = useState(false);
 
-  // Canvas Viewport Panning State
-  const [zoom, setZoom] = useState(0.85);
-  const [pan, setPan] = useState({ x: 60, y: 100 });
+  // Canvas Viewport Panning State with persistence
+  const [zoom, setZoom] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`hike_mindmap_viewport_${listId}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.zoom === 'number') return parsed.zoom;
+      }
+    } catch (e) {}
+    return 0.85;
+  });
+
+  const [pan, setPan] = useState<{ x: number; y: number }>(() => {
+    try {
+      const saved = localStorage.getItem(`hike_mindmap_viewport_${listId}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.pan?.x === 'number' && typeof parsed.pan?.y === 'number') {
+          return parsed.pan;
+        }
+      }
+    } catch (e) {}
+    return { x: 60, y: 100 };
+  });
+
   const [isCanvasPanning, setIsCanvasPanning] = useState(false);
   const canvasPanStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+
+  // Real-time Auto-Save Status
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved');
+
+  // Debounced Viewport Persistence
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(`hike_mindmap_viewport_${listId}`, JSON.stringify({ zoom, pan }));
+      } catch (e) {}
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [zoom, pan, listId]);
+
+  // Layout Mode Persistence
+  useEffect(() => {
+    try {
+      localStorage.setItem(`hike_mindmap_layoutmode_${listId}`, layoutMode);
+    } catch (e) {}
+  }, [layoutMode, listId]);
 
   // Context Menu State
   const [contextMenu, setContextMenu] = useState<{
@@ -396,15 +444,18 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
     setDragOffsets({});
   }, [listId, listTitle, destination]);
 
-  // Push new state into history
+  // Push new state into history & auto-save to localStorage
   const pushState = useCallback(
     (newRoot: MindMapNode, newEdges?: MindMapEdge[]) => {
+      setSaveStatus('saving');
       const edgesToSave = newEdges ?? edges;
       setRoot(newRoot);
       setEdges(edgesToSave);
       mindMapStorageService.saveMindMap(listId, newRoot);
       try {
         localStorage.setItem(`hike_edges_${listId}`, JSON.stringify(edgesToSave));
+        localStorage.setItem(`hike_mindmap_layoutmode_${listId}`, layoutMode);
+        localStorage.setItem(`hike_mindmap_viewport_${listId}`, JSON.stringify({ zoom, pan }));
       } catch (e) {}
 
       setHistory((prev) => {
@@ -414,8 +465,9 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
         return next;
       });
       setHistoryIndex((prev) => Math.min(prev + 1, 29));
+      setTimeout(() => setSaveStatus('saved'), 300);
     },
-    [listId, historyIndex, edges]
+    [listId, historyIndex, edges, layoutMode, zoom, pan]
   );
 
   // Undo / Redo Actions
@@ -820,9 +872,13 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   }, [handleFitView]);
 
   useEffect(() => {
-    const timer = setTimeout(() => handleFitView(), 120);
-    return () => clearTimeout(timer);
-  }, [listId, layoutMode]);
+    // 仅当用户未保存过自定义视口时才执行初始自动居中自适应，否则尊重用户调整过的缩放与平移
+    const hasSaved = !!localStorage.getItem(`hike_mindmap_viewport_${listId}`);
+    if (!hasSaved) {
+      const timer = setTimeout(() => handleFitView(), 120);
+      return () => clearTimeout(timer);
+    }
+  }, [listId, handleFitView]);
 
   // Reset to Clean Auto Layout (Clear Manual Positions & Apply Clean Grid)
   const handleAutoLayout = useCallback(() => {
@@ -1628,6 +1684,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
         <MindMapToolbar
           zoom={zoom}
           layoutMode={layoutMode}
+          saveStatus={saveStatus}
           onToggleLayoutMode={() =>
             setLayoutMode((m) =>
               m === 'timeline-flow' ? 'classic-tree' : 'timeline-flow'

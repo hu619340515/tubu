@@ -36,6 +36,7 @@ interface MindMapToolbarProps {
   onSelectPreset: (presetId: string) => void;
   presets: MindMapPreset[];
   totalNodes: number;
+  saveStatus?: 'saved' | 'saving';
 }
 
 export const MindMapToolbar: React.FC<MindMapToolbarProps> = ({
@@ -48,6 +49,7 @@ export const MindMapToolbar: React.FC<MindMapToolbarProps> = ({
   onRedo,
   onZoomIn,
   onZoomOut,
+  saveStatus = 'saved',
   onResetZoom,
   onFitView,
   onAutoLayout,
@@ -256,6 +258,18 @@ export const MindMapToolbar: React.FC<MindMapToolbarProps> = ({
         </button>
 
         <div className="w-px h-4 bg-[#D9D4C7] mx-1" />
+
+        {/* Real-time Auto-Save Status */}
+        <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 bg-white/80 border border-[#E5E1D8] rounded-xl text-[11px] text-[#5A5A40] font-medium shadow-2xs">
+          <span
+            className={`w-2 h-2 rounded-full transition-all duration-300 ${
+              saveStatus === 'saving' ? 'bg-amber-500 scale-125 animate-pulse' : 'bg-emerald-500'
+            }`}
+          />
+          <span className="font-semibold text-[#2C2C2C]">
+            {saveStatus === 'saving' ? '正在保存...' : '已自动保存'}
+          </span>
+        </div>
 
         {/* Export PNG */}
         <button

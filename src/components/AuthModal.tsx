@@ -16,24 +16,28 @@ import { storageService } from '../services/storageService';
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  currentUser: User;
+  currentUser: User | null;
   onUserChanged: (user: User) => void;
+  isMandatory?: boolean;
 }
 
-const AVATAR_OPTIONS = ['🏔️', '🌲', '⛺', '🧗', '🦌', '🦅', '🐺', '🦊', '🧭', '🎒'];
+const AVATAR_OPTIONS = ['👑', '🏔️', '🌲', '⛺', '🧗', '🦅', '🐺', '🦊', '🧭', '🎒'];
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
   currentUser,
   onUserChanged,
+  isMandatory = false,
 }) => {
-  const [mode, setMode] = useState<'login' | 'register' | 'switch'>('switch');
+  const [mode, setMode] = useState<'login' | 'register' | 'switch'>(
+    currentUser ? 'switch' : 'login'
+  );
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [selectedAvatar, setSelectedAvatar] = useState('🏔️');
-  const [experience, setExperience] = useState<'rookie' | 'intermediate' | 'expert'>('intermediate');
+  const [selectedAvatar, setSelectedAvatar] = useState('👑');
+  const [experience, setExperience] = useState<'rookie' | 'intermediate' | 'expert'>('expert');
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
@@ -104,38 +108,46 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         <div className="flex items-center justify-between px-6 py-4 bg-[#5A5A40] text-white shrink-0 border-b border-[#484833]">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center text-white text-base">
-              {currentUser.avatar || '🏔️'}
+              {currentUser?.avatar || '🥾'}
             </div>
             <div>
-              <h2 className="text-base font-serif font-bold tracking-tight">驴友账号与专属清单中心</h2>
-              <p className="text-xs text-[#DCD8CD]">一人一库 · 独立清单与打包进度</p>
+              <h2 className="text-base font-serif font-bold tracking-tight">
+                {isMandatory ? '格聂之行 · 账号登录验证' : '驴友账号与专属清单中心'}
+              </h2>
+              <p className="text-xs text-[#DCD8CD]">
+                {isMandatory ? '首次使用或登录后载入您的专属行程与装备库' : '一人一库 · 独立清单与打包进度'}
+              </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          {!isMandatory && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
         {/* Mode Switch Tabs */}
         <div className="flex border-b border-[#E5E1D8] bg-[#F5F5F0] px-4 text-xs font-medium text-[#7A7465] shrink-0">
-          <button
-            type="button"
-            onClick={() => {
-              setMode('switch');
-              setErrorMsg('');
-            }}
-            className={`py-3 px-3 border-b-2 transition ${
-              mode === 'switch'
-                ? 'border-[#5A5A40] text-[#5A5A40] font-bold'
-                : 'border-transparent hover:text-[#2C2C2C]'
-            }`}
-          >
-            专属用户切换
-          </button>
+          {currentUser && (
+            <button
+              type="button"
+              onClick={() => {
+                setMode('switch');
+                setErrorMsg('');
+              }}
+              className={`py-3 px-3 border-b-2 transition ${
+                mode === 'switch'
+                  ? 'border-[#5A5A40] text-[#5A5A40] font-bold'
+                  : 'border-transparent hover:text-[#2C2C2C]'
+              }`}
+            >
+              专属用户切换
+            </button>
+          )}
           <button
             type="button"
             onClick={() => {
@@ -180,8 +192,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           )}
 
-          {/* Mode 1: Quick Switch & Current User */}
-          {mode === 'switch' && (
+          {/* Mode 1: Quick Switch & Current User (Only when logged in) */}
+          {mode === 'switch' && currentUser && (
             <div className="space-y-4">
               <div className="p-3.5 bg-[#F0EEE8] border border-[#D9D4C7] rounded-2xl flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -194,6 +206,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       <span className="text-[10px] bg-[#5A5A40] text-white px-1.5 py-0.2 rounded font-medium">
                         当前活跃
                       </span>
+                      {currentUser.isAdmin && (
+                        <span className="text-[10px] bg-[#D27D59] text-white px-1.5 py-0.2 rounded font-bold">
+                          管理员
+                        </span>
+                      )}
                     </div>
                     <p className="text-[11px] text-[#7A7465]">{currentUser.email}</p>
                   </div>
@@ -219,7 +236,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       <div className="flex items-center gap-2.5">
                         <span className="text-xl">{u.avatar}</span>
                         <div>
-                          <p className="text-xs font-bold text-[#2C2C2C]">{u.username}</p>
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-xs font-bold text-[#2C2C2C]">{u.username}</p>
+                            {u.isAdmin && (
+                              <span className="text-[9px] bg-[#D27D59] text-white px-1 py-0.1 rounded font-bold">
+                                管理员
+                              </span>
+                            )}
+                          </div>
                           <p className="text-[11px] text-[#7A7465]">{u.email}</p>
                         </div>
                       </div>
@@ -240,7 +264,59 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
           {/* Mode 2: Login */}
           {mode === 'login' && (
-            <form onSubmit={handleLogin} className="space-y-3">
+            <form onSubmit={handleLogin} className="space-y-3.5">
+              {/* Quick Fill Admin Card */}
+              <div className="p-3 bg-[#F4F1EA] border border-[#D9D4C7] rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xl">👑</span>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-[#2C2C2C]">旺仔</span>
+                      <span className="text-[10px] bg-[#D27D59] text-white px-1.5 py-0.2 rounded font-bold">
+                        系统管理员
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-[#7A7465]">619340515@qq.com</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail('619340515@qq.com');
+                    setPassword('619340515');
+                  }}
+                  className="px-2.5 py-1 bg-[#5A5A40] hover:bg-[#484833] text-white text-xs font-bold rounded-lg transition"
+                >
+                  一键填入
+                </button>
+              </div>
+
+              {/* Quick Fill Demo Card */}
+              <div className="p-3 bg-white border border-[#E5E1D8] rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xl">🏔️</span>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-[#2C2C2C]">岩石 (老驴)</span>
+                      <span className="text-[10px] bg-[#EAE7DF] text-[#5A5A40] px-1.5 py-0.2 rounded font-medium">
+                        演示账号
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-[#7A7465]">rock@trailpack.cn</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail('rock@trailpack.cn');
+                    setPassword('123456');
+                  }}
+                  className="px-2.5 py-1 border border-[#5A5A40] text-[#5A5A40] hover:bg-[#FAF9F5] text-xs font-bold rounded-lg transition"
+                >
+                  一键填入
+                </button>
+              </div>
+
               <div>
                 <label className="text-xs font-bold text-[#5A5A40] block mb-1">账号 / 邮箱</label>
                 <div className="relative">
@@ -250,7 +326,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="rock@trailpack.cn 或 岩石"
+                    placeholder="619340515@qq.com 或 旺仔"
                     className="w-full pl-9 pr-3 py-2 bg-white border border-[#D9D4C7] rounded-xl text-xs sm:text-sm text-[#2C2C2C] focus:ring-2 focus:ring-[#5A5A40] focus:outline-none"
                   />
                 </div>
@@ -265,7 +341,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="体验账号密码为 123456"
+                    placeholder="请输入登录密码"
                     className="w-full pl-9 pr-3 py-2 bg-white border border-[#D9D4C7] rounded-xl text-xs sm:text-sm text-[#2C2C2C] focus:ring-2 focus:ring-[#5A5A40] focus:outline-none"
                   />
                 </div>

@@ -1,12 +1,24 @@
-import { User, HikingList, Category } from '../types';
+import { User, HikingList, Category, SiteAnnouncement } from '../types';
 import { TEMPLATE_LISTS, DEFAULT_CATEGORIES } from '../data/defaultTemplates';
 
 const USERS_KEY = 'hike_users_v1';
 const ACTIVE_USER_KEY = 'hike_active_user_v1';
 const LISTS_PREFIX = 'hike_lists_v1_';
 const SHARED_STORAGE_PREFIX = 'hike_shared_v1_';
+const ANNOUNCEMENT_KEY = 'hike_site_announcement_v1';
 
 const DEFAULT_USERS: (User & { passwordHash: string })[] = [
+  {
+    id: 'user-wangzai',
+    username: '旺仔',
+    email: '619340515@qq.com',
+    passwordHash: '619340515',
+    avatar: '👑',
+    experienceLevel: 'expert',
+    role: 'admin',
+    isAdmin: true,
+    createdAt: Date.now() - 60 * 24 * 3600 * 1000,
+  },
   {
     id: 'user-rock',
     username: '岩石 (老驴)',
@@ -14,22 +26,118 @@ const DEFAULT_USERS: (User & { passwordHash: string })[] = [
     passwordHash: '123456',
     avatar: '🏔️',
     experienceLevel: 'expert',
+    role: 'user',
+    isAdmin: false,
     createdAt: Date.now() - 30 * 24 * 3600 * 1000,
   },
-  {
-    id: 'user-deer',
-    username: '小鹿 (徒步小白)',
-    email: 'deer@trailpack.cn',
-    passwordHash: '123456',
-    avatar: '🦌',
-    experienceLevel: 'rookie',
-    createdAt: Date.now() - 5 * 24 * 3600 * 1000,
-  },
 ];
+
+const DEFAULT_ANNOUNCEMENT: SiteAnnouncement = {
+  id: 'announcement-default',
+  enabled: true,
+  title: '格聂高海拔徒步风控通知',
+  content: '格聂大环线全程海拔多在 3800m~4980m，近期垭口阵风较大且夜间逼近冰点，请全员务必备齐温标零下羽绒睡袋、硬壳冲锋衣与高反急救药品！',
+  type: 'warning',
+  updatedAt: Date.now(),
+};
+
+// Ensure data migration and user cleanup runs
+function ensureDataMigrated(): void {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
+  try {
+    const rawUsers = localStorage.getItem(USERS_KEY);
+    let users: (User & { passwordHash: string })[] = rawUsers ? JSON.parse(rawUsers) : [];
+
+    // 1. Filter out deleted user "小鹿"
+    users = users.filter((u) => u.id !== 'user-deer' && u.email !== 'deer@trailpack.cn');
+
+    // 2. Ensure administrator "旺仔" exists with admin privileges and correct credentials
+    const wangzaiIdx = users.findIndex((u) => u.email.toLowerCase() === '619340515@qq.com');
+    if (wangzaiIdx === -1) {
+      users.unshift(DEFAULT_USERS[0]);
+    } else {
+      users[wangzaiIdx].isAdmin = true;
+      users[wangzaiIdx].role = 'admin';
+      users[wangzaiIdx].username = '旺仔';
+      users[wangzaiIdx].passwordHash = '619340515';
+    }
+
+    // 3. Ensure "岩石" exists as well
+    if (!users.some((u) => u.id === 'user-rock')) {
+      users.push(DEFAULT_USERS[1]);
+    }
+
+    localStorage.setItem(USERS_KEY, JSON.stringify(users));
+
+    // 4. Migrate Rock's full list & mindmap data to Wangzai
+    const wangzaiListsKey = LISTS_PREFIX + 'user-wangzai';
+    const rockListsKey = LISTS_PREFIX + 'user-rock';
+    const rawWangzaiLists = localStorage.getItem(wangzaiListsKey);
+    const rawRockLists = localStorage.getItem(rockListsKey);
+
+    let rockLists: HikingList[] = [];
+    if (rawRockLists) {
+      try {
+        rockLists = JSON.parse(rawRockLists);
+      } catch (e) {}
+    }
+    if (!rockLists || rockLists.length === 0) {
+      rockLists = TEMPLATE_LISTS.map((tpl, idx) => ({
+        id: `list-user-rock-${idx + 1}`,
+        userId: 'user-rock',
+        ...tpl,
+        customCategories: tpl.customCategories || [...DEFAULT_CATEGORIES],
+        createdAt: Date.now() - idx * 86400000,
+        updatedAt: Date.now() - idx * 43200000,
+        isFavorite: idx === 0,
+      }));
+      localStorage.setItem(rockListsKey, JSON.stringify(rockLists));
+    }
+
+    const MIGRATION_FLAG = 'hike_migrated_rock_to_wangzai_v1';
+    if (!localStorage.getItem(MIGRATION_FLAG) || !rawWangzaiLists) {
+      const clonedLists: HikingList[] = rockLists.map((list, idx) => {
+        const oldId = list.id;
+        const newId = `list-user-wangzai-${idx + 1}`;
+
+        // Clone mindmap storage & edges from rock to wangzai
+        try {
+          const oldMindMap = localStorage.getItem('hike_mindmap_v1_' + oldId);
+          if (oldMindMap) localStorage.setItem('hike_mindmap_v1_' + newId, oldMindMap);
+
+          const oldEdges = localStorage.getItem('hike_edges_' + oldId);
+          if (oldEdges) localStorage.setItem('hike_edges_' + newId, oldEdges);
+
+          const oldLayout = localStorage.getItem('hike_mindmap_layoutmode_' + oldId);
+          if (oldLayout) localStorage.setItem('hike_mindmap_layoutmode_' + newId, oldLayout);
+
+          const oldViewport = localStorage.getItem('hike_mindmap_viewport_' + oldId);
+          if (oldViewport) localStorage.setItem('hike_mindmap_viewport_' + newId, oldViewport);
+        } catch (e) {}
+
+        return {
+          ...JSON.parse(JSON.stringify(list)),
+          id: newId,
+          userId: 'user-wangzai',
+          updatedAt: Date.now(),
+        };
+      });
+
+      localStorage.setItem(wangzaiListsKey, JSON.stringify(clonedLists));
+      localStorage.setItem(MIGRATION_FLAG, 'true');
+    }
+  } catch (e) {
+    console.error('Data migration failed:', e);
+  }
+}
+
+// Run migration immediately on module load
+ensureDataMigrated();
 
 export const storageService = {
   getUsers(): User[] {
     try {
+      ensureDataMigrated();
       const raw = localStorage.getItem(USERS_KEY);
       if (!raw) {
         localStorage.setItem(USERS_KEY, JSON.stringify(DEFAULT_USERS));
@@ -39,33 +147,53 @@ export const storageService = {
       return parsed.map(({ passwordHash, ...u }) => u);
     } catch (e) {
       console.error('Failed to get users:', e);
+      return DEFAULT_USERS.map(({ passwordHash, ...u }) => u);
+    }
+  },
+
+  getAllUsersWithPasswords(): (User & { passwordHash: string })[] {
+    try {
+      ensureDataMigrated();
+      const raw = localStorage.getItem(USERS_KEY);
+      return raw ? JSON.parse(raw) : DEFAULT_USERS;
+    } catch (e) {
       return DEFAULT_USERS;
     }
   },
 
-  getActiveUser(): User {
+  getActiveUser(): User | null {
     try {
+      ensureDataMigrated();
       const raw = localStorage.getItem(ACTIVE_USER_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed && parsed.id) return parsed;
+        if (parsed && parsed.id) {
+          // Verify user exists
+          const users = this.getUsers();
+          const found = users.find((u) => u.id === parsed.id);
+          if (found) return found;
+        }
       }
     } catch (e) {
       console.error('Failed to get active user:', e);
     }
-    // Default to first user
-    const users = this.getUsers();
-    const fallback = users[0] || DEFAULT_USERS[0];
-    localStorage.setItem(ACTIVE_USER_KEY, JSON.stringify(fallback));
-    return fallback;
+    // "首次打开需要登录": return null if not logged in
+    return null;
   },
 
   setActiveUser(user: User): void {
     localStorage.setItem(ACTIVE_USER_KEY, JSON.stringify(user));
   },
 
-  register(username: string, email: string, password: string, avatar = '🎒', experienceLevel: 'rookie' | 'intermediate' | 'expert' = 'intermediate'): { success: boolean; error?: string; user?: User } {
+  register(
+    username: string,
+    email: string,
+    password: string,
+    avatar = '🎒',
+    experienceLevel: 'rookie' | 'intermediate' | 'expert' = 'intermediate'
+  ): { success: boolean; error?: string; user?: User } {
     try {
+      ensureDataMigrated();
       const raw = localStorage.getItem(USERS_KEY);
       const existing: (User & { passwordHash: string })[] = raw ? JSON.parse(raw) : [...DEFAULT_USERS];
 
@@ -76,6 +204,7 @@ export const storageService = {
         return { success: false, error: '该昵称已被使用，请换一个' };
       }
 
+      const isFirstUser = existing.length === 0;
       const newUser: User & { passwordHash: string } = {
         id: 'user-' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
         username,
@@ -83,6 +212,8 @@ export const storageService = {
         passwordHash: password,
         avatar,
         experienceLevel,
+        role: isFirstUser ? 'admin' : 'user',
+        isAdmin: isFirstUser,
         createdAt: Date.now(),
       };
 
@@ -113,6 +244,7 @@ export const storageService = {
 
   login(emailOrUsername: string, password: string): { success: boolean; error?: string; user?: User } {
     try {
+      ensureDataMigrated();
       const raw = localStorage.getItem(USERS_KEY);
       const existing: (User & { passwordHash: string })[] = raw ? JSON.parse(raw) : [...DEFAULT_USERS];
 
@@ -124,7 +256,7 @@ export const storageService = {
       );
 
       if (!user) {
-        return { success: false, error: '账号或密码不正确（体验账号密码均为 123456）' };
+        return { success: false, error: '账号或密码不正确' };
       }
 
       const { passwordHash, ...safeUser } = user;
@@ -136,15 +268,12 @@ export const storageService = {
   },
 
   logout(): void {
-    const users = this.getUsers();
-    // Default back to guest or first user
-    if (users.length > 0) {
-      this.setActiveUser(users[0]);
-    }
+    localStorage.removeItem(ACTIVE_USER_KEY);
   },
 
   getUserLists(userId: string): HikingList[] {
     try {
+      ensureDataMigrated();
       const key = LISTS_PREFIX + userId;
       const raw = localStorage.getItem(key);
       if (raw) {
@@ -177,11 +306,203 @@ export const storageService = {
     try {
       const key = LISTS_PREFIX + userId;
       localStorage.setItem(key, JSON.stringify(lists));
-      // Trigger a storage sync event for multi-tab updates
       window.dispatchEvent(new CustomEvent('trailpack_sync', { detail: { userId, timestamp: Date.now() } }));
     } catch (e) {
       console.error('Failed to save user lists:', e);
     }
+  },
+
+  // ================= ADMIN MANAGEMENT APIS =================
+
+  updateUserPassword(userId: string, newPass: string): { success: boolean; error?: string } {
+    try {
+      const users = this.getAllUsersWithPasswords();
+      const idx = users.findIndex((u) => u.id === userId);
+      if (idx === -1) return { success: false, error: '用户不存在' };
+      users[idx].passwordHash = newPass;
+      localStorage.setItem(USERS_KEY, JSON.stringify(users));
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: '修改密码失败' };
+    }
+  },
+
+  deleteUser(userId: string): { success: boolean; error?: string } {
+    try {
+      let users = this.getAllUsersWithPasswords();
+      const target = users.find((u) => u.id === userId);
+      if (!target) return { success: false, error: '用户不存在' };
+      if (target.email === '619340515@qq.com') {
+        return { success: false, error: '超级管理员账号不可删除' };
+      }
+
+      users = users.filter((u) => u.id !== userId);
+      localStorage.setItem(USERS_KEY, JSON.stringify(users));
+
+      // Remove user's lists
+      localStorage.removeItem(LISTS_PREFIX + userId);
+
+      // If active user is this deleted user, logout
+      const active = this.getActiveUser();
+      if (active && active.id === userId) {
+        this.logout();
+      }
+
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: '删除用户失败' };
+    }
+  },
+
+  toggleAdminRole(userId: string): { success: boolean; error?: string } {
+    try {
+      const users = this.getAllUsersWithPasswords();
+      const idx = users.findIndex((u) => u.id === userId);
+      if (idx === -1) return { success: false, error: '用户不存在' };
+      if (users[idx].email === '619340515@qq.com') {
+        return { success: false, error: '主超级管理员权限不可更改' };
+      }
+
+      const nextState = !users[idx].isAdmin;
+      users[idx].isAdmin = nextState;
+      users[idx].role = nextState ? 'admin' : 'user';
+      localStorage.setItem(USERS_KEY, JSON.stringify(users));
+
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: '切换权限失败' };
+    }
+  },
+
+  adminCreateUser(
+    username: string,
+    email: string,
+    password: string,
+    avatar: string,
+    role: 'admin' | 'user'
+  ): { success: boolean; error?: string } {
+    try {
+      const users = this.getAllUsersWithPasswords();
+      if (users.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
+        return { success: false, error: '邮箱已被注册' };
+      }
+      const newUser: User & { passwordHash: string } = {
+        id: 'user-' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
+        username,
+        email,
+        passwordHash: password,
+        avatar: avatar || '🎒',
+        experienceLevel: 'intermediate',
+        role,
+        isAdmin: role === 'admin',
+        createdAt: Date.now(),
+      };
+      users.push(newUser);
+      localStorage.setItem(USERS_KEY, JSON.stringify(users));
+
+      // Seed initial list
+      this.getUserLists(newUser.id);
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: '创建用户失败' };
+    }
+  },
+
+  getAllSystemLists(): { list: HikingList; ownerName: string; ownerEmail: string }[] {
+    try {
+      const users = this.getUsers();
+      const result: { list: HikingList; ownerName: string; ownerEmail: string }[] = [];
+
+      for (const u of users) {
+        const lists = this.getUserLists(u.id);
+        for (const l of lists) {
+          result.push({
+            list: l,
+            ownerName: u.username,
+            ownerEmail: u.email,
+          });
+        }
+      }
+
+      return result;
+    } catch (e) {
+      console.error('Failed to get system lists:', e);
+      return [];
+    }
+  },
+
+  deleteSystemList(listId: string, userId: string): boolean {
+    try {
+      const lists = this.getUserLists(userId);
+      const filtered = lists.filter((l) => l.id !== listId);
+      this.saveUserLists(userId, filtered);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  getSiteAnnouncement(): SiteAnnouncement {
+    try {
+      const raw = localStorage.getItem(ANNOUNCEMENT_KEY);
+      if (raw) {
+        return JSON.parse(raw);
+      }
+    } catch (e) {}
+    return DEFAULT_ANNOUNCEMENT;
+  },
+
+  saveSiteAnnouncement(announcement: SiteAnnouncement): void {
+    try {
+      localStorage.setItem(ANNOUNCEMENT_KEY, JSON.stringify(announcement));
+      window.dispatchEvent(new CustomEvent('trailpack_announcement_update'));
+    } catch (e) {
+      console.error('Failed to save announcement:', e);
+    }
+  },
+
+  exportAllSystemData(): string {
+    const backup: Record<string, any> = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('hike_')) {
+        backup[k] = localStorage.getItem(k);
+      }
+    }
+    return JSON.stringify(backup, null, 2);
+  },
+
+  importAllSystemData(jsonStr: string): { success: boolean; error?: string } {
+    try {
+      const parsed = JSON.parse(jsonStr);
+      if (typeof parsed !== 'object' || parsed === null) {
+        return { success: false, error: '备份文件格式不正确' };
+      }
+      for (const [k, v] of Object.entries(parsed)) {
+        if (typeof v === 'string') {
+          localStorage.setItem(k, v);
+        }
+      }
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: '解析并导入数据失败' };
+    }
+  },
+
+  getStorageUsage(): { usedKb: number; count: number } {
+    let totalLen = 0;
+    let count = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k) {
+        totalLen += (k.length + (localStorage.getItem(k)?.length || 0)) * 2;
+        count++;
+      }
+    }
+    return {
+      usedKb: +(totalLen / 1024).toFixed(1),
+      count,
+    };
   },
 
   saveSharedSnapshot(shareKey: string, payload: unknown): void {
