@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
 import {
   Upload,
   Layers,
@@ -15,6 +14,7 @@ import {
 } from 'lucide-react';
 import { ParsedTrack, TrackPoint, TrackWaypoint } from '../../types/track';
 import { trackParserService } from '../../services/trackParserService';
+import { wgs84ToGcj02 } from '../../services/coordTransform';
 import { ElevationChart } from './ElevationChart';
 
 interface RouteMapPanelProps {
@@ -25,41 +25,69 @@ interface RouteMapPanelProps {
 
 type LayerType = 'satellite' | 'topo' | 'osm';
 
-const TILE_SERVERS: Record<LayerType, { url: string; attribution: string; subdomains?: string[] }> = {
+// Domestic high-speed AutoNavi (AMap) tiles (100% accessible, sub-10ms response in China)
+const TILE_CONFIG: Record<
+  LayerType,
+  {
+    base: string;
+    annotation?: string;
+    subdomains: string[];
+    attribution: string;
+  }
+> = {
   satellite: {
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    attribution: 'Esri World Imagery',
+    base: 'https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
+    annotation: 'https://webst0{s}.is.autonavi.com/appmaptile?style=8&x={x}&y={y}&z={z}',
+    subdomains: ['1', '2', '3', '4'],
+    attribution: '高德卫星影像 · 极速出图',
   },
   topo: {
-    url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-    attribution: 'OpenTopoMap (CC-BY-SA)',
-    subdomains: ['a', 'b', 'c'],
+    base: 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x={x}&y={y}&z={z}',
+    subdomains: ['1', '2', '3', '4'],
+    attribution: '高德地形晕渲 · 等高线地貌',
   },
   osm: {
-    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '© OpenStreetMap contributors',
+    base: 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+    subdomains: ['1', '2', '3', '4'],
+    attribution: '高德标准地图 · 户外路网',
   },
 };
 
-function createDivIcon(emoji: string, bgClass: string, isSmall = false): L.DivIcon {
+function createDivIcon(emoji: string, bgClass: string, label?: string): L.DivIcon {
   return L.divIcon({
     className: 'custom-leaflet-marker',
     html: `
-      <div style="
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: ${isSmall ? '24px' : '30px'};
-        height: ${isSmall ? '24px' : '30px'};
-        border-radius: 50%;
-        background: ${bgClass};
-        border: 2px solid #FFFFFF;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-        font-size: ${isSmall ? '12px' : '15px'};
-        cursor: pointer;
-        transform: translate(-50%, -50%);
-      ">
-        ${emoji}
+      <div style="display: flex; flex-direction: column; align-items: center; cursor: pointer; transform: translate(-50%, -100%);">
+        <div style="
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          background: ${bgClass};
+          border: 2px solid #FFFFFF;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+          font-size: 14px;
+        ">
+          ${emoji}
+        </div>
+        ${
+          label
+            ? `<div style="
+                margin-top: 2px;
+                padding: 1px 6px;
+                background: rgba(255,255,255,0.92);
+                border: 1px solid #D9D4C7;
+                border-radius: 6px;
+                font-size: 10px;
+                font-weight: bold;
+                color: #2C2C2C;
+                white-space: nowrap;
+                box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+              ">${label}</div>`
+            : ''
+        }
       </div>
     `,
     iconSize: [0, 0],
@@ -74,7 +102,8 @@ export const RouteMapPanel: React.FC<RouteMapPanelProps> = ({
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
-  const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const baseTileLayerRef = useRef<L.TileLayer | null>(null);
+  const annoTileLayerRef = useRef<L.TileLayer | null>(null);
   const trackLayerGroupRef = useRef<L.LayerGroup | null>(null);
   const hoverMarkerRef = useRef<L.CircleMarker | null>(null);
 
@@ -93,7 +122,7 @@ export const RouteMapPanel: React.FC<RouteMapPanelProps> = ({
     const map = L.map(mapContainerRef.current, {
       zoomControl: false,
       attributionControl: false,
-      minZoom: 4,
+      minZoom: 3,
       maxZoom: 18,
     }).setView([29.8, 99.6], 11);
 
@@ -103,31 +132,42 @@ export const RouteMapPanel: React.FC<RouteMapPanelProps> = ({
     // Attribution control at bottom right
     L.control.attribution({ position: 'bottomright', prefix: false }).addTo(map);
 
-    // Add Base Tile Layer
-    const { url, attribution, subdomains } = TILE_SERVERS[activeLayer];
-    const tileLayer = L.tileLayer(url, {
-      attribution,
-      subdomains: subdomains || 'abc',
+    // Base tile layer
+    const cfg = TILE_CONFIG[activeLayer];
+    const baseLayer = L.tileLayer(cfg.base, {
+      attribution: cfg.attribution,
+      subdomains: cfg.subdomains,
       maxZoom: 18,
     }).addTo(map);
+    baseTileLayerRef.current = baseLayer;
 
-    tileLayerRef.current = tileLayer;
+    // Annotation overlay layer (for satellite layer)
+    if (cfg.annotation) {
+      const annoLayer = L.tileLayer(cfg.annotation, {
+        subdomains: cfg.subdomains,
+        maxZoom: 18,
+      }).addTo(map);
+      annoTileLayerRef.current = annoLayer;
+    }
 
     // Layer group for tracks and markers
     const lg = L.layerGroup().addTo(map);
     trackLayerGroupRef.current = lg;
 
-    // Hover marker
+    // Hover marker on track
     const hm = L.circleMarker([0, 0], {
-      radius: 6,
-      fillColor: '#D95D39',
+      radius: 6.5,
+      fillColor: '#2563EB',
       color: '#FFFFFF',
-      weight: 2.5,
+      weight: 3,
       opacity: 1,
-      fillOpacity: 0.9,
+      fillOpacity: 1,
     });
     hoverMarkerRef.current = hm;
 
+    mapInstanceRef.current = map;
+
+    // Auto resize observer
     const ro = new ResizeObserver(() => {
       map.invalidateSize();
     });
@@ -141,7 +181,9 @@ export const RouteMapPanel: React.FC<RouteMapPanelProps> = ({
       .then((parsed) => {
         setTrack(parsed);
         setLoading(false);
-        setTimeout(() => map.invalidateSize(), 100);
+        requestAnimationFrame(() => {
+          map.invalidateSize();
+        });
       })
       .catch((e) => {
         console.warn('Failed to load demo track:', e);
@@ -157,14 +199,35 @@ export const RouteMapPanel: React.FC<RouteMapPanelProps> = ({
 
   // Switch Base Map Layer
   useEffect(() => {
-    if (!mapInstanceRef.current || !tileLayerRef.current) return;
-    const { url, attribution, subdomains } = TILE_SERVERS[activeLayer];
-    tileLayerRef.current.setUrl(url);
-    tileLayerRef.current.options.attribution = attribution;
-    if (subdomains) tileLayerRef.current.options.subdomains = subdomains;
+    const map = mapInstanceRef.current;
+    if (!map || !baseTileLayerRef.current) return;
+
+    const cfg = TILE_CONFIG[activeLayer];
+    baseTileLayerRef.current.setUrl(cfg.base);
+    baseTileLayerRef.current.options.attribution = cfg.attribution;
+    baseTileLayerRef.current.options.subdomains = cfg.subdomains;
+
+    if (cfg.annotation) {
+      if (!annoTileLayerRef.current) {
+        const annoLayer = L.tileLayer(cfg.annotation, {
+          subdomains: cfg.subdomains,
+          maxZoom: 18,
+        }).addTo(map);
+        annoTileLayerRef.current = annoLayer;
+      } else {
+        annoTileLayerRef.current.setUrl(cfg.annotation);
+        if (!map.hasLayer(annoTileLayerRef.current)) {
+          annoTileLayerRef.current.addTo(map);
+        }
+      }
+    } else {
+      if (annoTileLayerRef.current && map.hasLayer(annoTileLayerRef.current)) {
+        map.removeLayer(annoTileLayerRef.current);
+      }
+    }
   }, [activeLayer]);
 
-  // Render Track & Waypoints when track changes
+  // Render Track & Waypoints whenever track changes
   useEffect(() => {
     const map = mapInstanceRef.current;
     const lg = trackLayerGroupRef.current;
@@ -172,56 +235,80 @@ export const RouteMapPanel: React.FC<RouteMapPanelProps> = ({
 
     lg.clearLayers();
 
-    // 1. Draw Full Polyline
-    const latLngs: L.LatLngTuple[] = track.allPoints.map((p) => [p.lat, p.lng]);
+    // Convert WGS84 GPS track coordinates to GCJ02 for seamless alignment on domestic tiles
+    const latLngs: L.LatLngTuple[] = track.allPoints.map((p) => {
+      const [gcjLat, gcjLng] = wgs84ToGcj02(p.lat, p.lng);
+      return [gcjLat, gcjLng];
+    });
+
     if (latLngs.length > 0) {
-      // Glow background line
+      // 1. White border casing line for contrast
       L.polyline(latLngs, {
-        color: '#000000',
-        weight: 6,
-        opacity: 0.45,
+        color: '#FFFFFF',
+        weight: 6.5,
+        opacity: 0.9,
         lineCap: 'round',
         lineJoin: 'round',
       }).addTo(lg);
 
-      // Main colored route line
+      // 2. Main vibrant outdoor trail line
       L.polyline(latLngs, {
-        color: '#D95D39',
-        weight: 3.8,
-        opacity: 0.95,
+        color: '#E63946',
+        weight: 4,
+        opacity: 1,
         lineCap: 'round',
         lineJoin: 'round',
       }).addTo(lg);
 
-      // Fit bounds
+      // Fit map bounds to track
       const bounds = L.latLngBounds(latLngs);
-      map.fitBounds(bounds, { padding: [30, 30] });
+      if (bounds.isValid()) {
+        map.invalidateSize();
+        map.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
+      }
     }
 
-    // 2. Add Waypoints Markers
-    track.waypoints.forEach((wpt) => {
+    // Filter meaningful waypoints to keep map clean and prevent DOM overload
+    const meaningfulWaypoints = track.waypoints.filter((wpt) => {
+      if (wpt.type === 'start' || wpt.type === 'end' || wpt.type === 'camp' || wpt.type === 'pass') {
+        return true;
+      }
+      const cleanName = wpt.name.replace(/<!\[CDATA\[|\]\]>/g, '').trim();
+      return (
+        cleanName &&
+        cleanName !== '实景打卡' &&
+        !cleanName.startsWith('标点') &&
+        cleanName !== 'Point' &&
+        cleanName !== 'Waypoint'
+      );
+    });
+
+    // 3. Add prominent waypoint markers
+    meaningfulWaypoints.forEach((wpt) => {
+      const cleanName = wpt.name.replace(/<!\[CDATA\[|\]\]>/g, '').trim();
       let icon: L.DivIcon;
       if (wpt.type === 'start') {
-        icon = createDivIcon('🟢', '#10B981');
+        icon = createDivIcon('🟢', '#10B981', '起点 · 然日卡');
       } else if (wpt.type === 'end') {
-        icon = createDivIcon('🏁', '#EF4444');
+        icon = createDivIcon('🏁', '#EF4444', '终点 · 惹迪');
       } else if (wpt.type === 'camp') {
-        icon = createDivIcon('⛺', '#3B82F6');
+        icon = createDivIcon('⛺', '#3B82F6', cleanName || '营地');
       } else if (wpt.type === 'pass') {
-        icon = createDivIcon('🏔️', '#8B5CF6');
-      } else if (wpt.type === 'photo') {
-        icon = createDivIcon('📸', '#F59E0B', true);
+        icon = createDivIcon('🏔️', '#8B5CF6', cleanName || '垭口');
+      } else if (wpt.imageUrl || cleanName.includes('眼') || cleanName.includes('湖')) {
+        icon = createDivIcon('📸', '#F59E0B', cleanName);
       } else {
-        icon = createDivIcon('📍', '#64748B', true);
+        icon = createDivIcon('📍', '#64748B', cleanName);
       }
 
-      const marker = L.marker([wpt.lat, wpt.lng], { icon });
+      const [gcjLat, gcjLng] = wgs84ToGcj02(wpt.lat, wpt.lng);
+      const marker = L.marker([gcjLat, gcjLng], { icon });
 
       // Popup Content
       const popupHtml = `
         <div style="font-family: inherit; font-size: 12px; line-height: 1.4; max-width: 220px;">
           <div style="font-weight: bold; color: #2C2C2C; margin-bottom: 2px;">
-            ${wpt.name}
+            ${cleanName || wpt.name}
           </div>
           ${
             wpt.ele
@@ -265,7 +352,7 @@ export const RouteMapPanel: React.FC<RouteMapPanelProps> = ({
         const btn = document.getElementById(`popup-btn-${wpt.id}`);
         if (btn) {
           btn.onclick = () => {
-            onFocusNodeByTitle?.(wpt.name);
+            onFocusNodeByTitle?.(cleanName || wpt.name);
           };
         }
       });
@@ -281,7 +368,8 @@ export const RouteMapPanel: React.FC<RouteMapPanelProps> = ({
     if (!map || !hm) return;
 
     if (hoveredPoint) {
-      hm.setLatLng([hoveredPoint.lat, hoveredPoint.lng]);
+      const [gcjLat, gcjLng] = wgs84ToGcj02(hoveredPoint.lat, hoveredPoint.lng);
+      hm.setLatLng([gcjLat, gcjLng]);
       if (!map.hasLayer(hm)) {
         hm.addTo(map);
       }
@@ -297,15 +385,14 @@ export const RouteMapPanel: React.FC<RouteMapPanelProps> = ({
     if (!highlightedNodeTitle || !track || !mapInstanceRef.current) return;
     const map = mapInstanceRef.current;
 
-    // Search matching waypoint
-    const matched = track.waypoints.find(
-      (w) =>
-        w.name.includes(highlightedNodeTitle) ||
-        highlightedNodeTitle.includes(w.name)
-    );
+    const matched = track.waypoints.find((w) => {
+      const cleanName = w.name.replace(/<!\[CDATA\[|\]\]>/g, '').trim();
+      return cleanName.includes(highlightedNodeTitle) || highlightedNodeTitle.includes(cleanName);
+    });
 
     if (matched) {
-      map.flyTo([matched.lat, matched.lng], 14, { duration: 1.2 });
+      const [gcjLat, gcjLng] = wgs84ToGcj02(matched.lat, matched.lng);
+      map.flyTo([gcjLat, gcjLng], 14, { duration: 1.0 });
     }
   }, [highlightedNodeTitle, track]);
 
@@ -358,7 +445,11 @@ export const RouteMapPanel: React.FC<RouteMapPanelProps> = ({
 
   const handleFitBounds = () => {
     if (!mapInstanceRef.current || !track || track.allPoints.length === 0) return;
-    const latLngs: L.LatLngTuple[] = track.allPoints.map((p) => [p.lat, p.lng]);
+    const latLngs: L.LatLngTuple[] = track.allPoints.map((p) => {
+      const [gcjLat, gcjLng] = wgs84ToGcj02(p.lat, p.lng);
+      return [gcjLat, gcjLng];
+    });
+    mapInstanceRef.current.invalidateSize();
     mapInstanceRef.current.fitBounds(L.latLngBounds(latLngs), { padding: [30, 30] });
   };
 
@@ -372,7 +463,7 @@ export const RouteMapPanel: React.FC<RouteMapPanelProps> = ({
       {/* Header bar */}
       <div className="flex items-center justify-between gap-2 px-3 py-2 bg-white/95 backdrop-blur border-b border-[#D9D4C7] shrink-0 z-10">
         <div className="flex items-center gap-2 min-w-0">
-          <div className="w-7 h-7 rounded-lg bg-[#5A5A40] flex items-center justify-center text-white shrink-0">
+          <div className="w-7 h-7 rounded-lg bg-[#5A5A40] flex items-center justify-center text-white shrink-0 shadow-2xs">
             <Navigation className="w-3.5 h-3.5" />
           </div>
           <div className="min-w-0">
@@ -398,10 +489,10 @@ export const RouteMapPanel: React.FC<RouteMapPanelProps> = ({
               onClick={() => setActiveLayer('satellite')}
               className={`px-1.5 py-0.5 rounded transition ${
                 activeLayer === 'satellite'
-                  ? 'bg-[#5A5A40] text-white'
+                  ? 'bg-[#5A5A40] text-white shadow-2xs'
                   : 'hover:text-[#2C2C2C]'
               }`}
-              title="卫星遥感实景"
+              title="高德卫星影像（极速实景）"
             >
               卫星
             </button>
@@ -410,10 +501,10 @@ export const RouteMapPanel: React.FC<RouteMapPanelProps> = ({
               onClick={() => setActiveLayer('topo')}
               className={`px-1.5 py-0.5 rounded transition ${
                 activeLayer === 'topo'
-                  ? 'bg-[#5A5A40] text-white'
+                  ? 'bg-[#5A5A40] text-white shadow-2xs'
                   : 'hover:text-[#2C2C2C]'
               }`}
-              title="等高线地形图"
+              title="高德地形晕渲（等高线地貌）"
             >
               等高线
             </button>
@@ -422,10 +513,10 @@ export const RouteMapPanel: React.FC<RouteMapPanelProps> = ({
               onClick={() => setActiveLayer('osm')}
               className={`px-1.5 py-0.5 rounded transition ${
                 activeLayer === 'osm'
-                  ? 'bg-[#5A5A40] text-white'
+                  ? 'bg-[#5A5A40] text-white shadow-2xs'
                   : 'hover:text-[#2C2C2C]'
               }`}
-              title="标准户外地图"
+              title="高德标准地图（户外路网地名）"
             >
               地图
             </button>
@@ -452,7 +543,7 @@ export const RouteMapPanel: React.FC<RouteMapPanelProps> = ({
               accept=".kmz,.kml,.gpx"
               className="hidden"
               onChange={(e) => {
-                if (e.target.files && e.target.files.length > 0) {
+                if (e.target.files && e.target.files[0]) {
                   handleFile(e.target.files[0]);
                 }
               }}
@@ -464,8 +555,8 @@ export const RouteMapPanel: React.FC<RouteMapPanelProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1 hover:bg-[#FAF8F5] border border-transparent hover:border-[#D9D4C7] text-[#7A7465] hover:text-[#2C2C2C] rounded-lg transition cursor-pointer"
-              title="收起路线地图"
+              className="p-1 hover:bg-[#FDE8E8] text-[#7A7465] hover:text-[#B33A3A] rounded-lg transition cursor-pointer"
+              title="关闭地图分屏"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -473,101 +564,46 @@ export const RouteMapPanel: React.FC<RouteMapPanelProps> = ({
         </div>
       </div>
 
-      {/* Drag & Drop Highlight Mask */}
-      {isDragOver && (
-        <div className="absolute inset-0 z-30 bg-[#5A5A40]/80 backdrop-blur-xs flex flex-col items-center justify-center text-white pointer-events-none">
-          <Upload className="w-10 h-10 mb-2 animate-bounce" />
-          <p className="text-sm font-bold">释放鼠标，立即导入两步路轨迹文件！</p>
-          <p className="text-xs text-[#DCD8CD] mt-1">支持 .kmz / .kml / .gpx</p>
-        </div>
-      )}
+      {/* Main Map Container */}
+      <div className="flex-1 w-full min-h-0 relative">
+        <div ref={mapContainerRef} className="w-full h-full relative" />
 
-      {/* Error notification */}
-      {errorMsg && (
-        <div className="px-3 py-1.5 bg-[#FDF2F0] text-[#D27D59] text-xs font-medium border-b border-[#D27D59]/30 flex items-center justify-between shrink-0">
-          <span>⚠️ {errorMsg}</span>
-          <button type="button" onClick={() => setErrorMsg(null)} className="text-xs font-bold">
-            ×
-          </button>
-        </div>
-      )}
-
-      {/* Leaflet Map Canvas */}
-      <div className="flex-1 w-full h-full relative min-h-0">
-        <div ref={mapContainerRef} className="w-full h-full" />
-
-        {/* Loading Overlay */}
-        {loading && (
-          <div className="absolute inset-0 z-20 bg-white/70 backdrop-blur-2xs flex items-center justify-center">
-            <div className="flex items-center gap-2 px-3 py-2 bg-white rounded-xl shadow-md border border-[#E5E1D8] text-xs font-bold text-[#5A5A40]">
-              <span className="w-3.5 h-3.5 border-2 border-[#5A5A40] border-t-transparent rounded-full animate-spin" />
-              <span>正在载入两步路轨迹...</span>
-            </div>
+        {/* Drag Over Overlay */}
+        {isDragOver && (
+          <div className="absolute inset-0 z-30 bg-[#5A5A40]/80 backdrop-blur-xs flex flex-col items-center justify-center text-white border-2 border-dashed border-white m-3 rounded-2xl pointer-events-none">
+            <Upload className="w-10 h-10 mb-2 animate-bounce" />
+            <p className="text-sm font-bold">释放鼠标导入轨迹</p>
+            <p className="text-xs text-white/80">支持两步路 KMZ、KML、GPX 文件</p>
           </div>
         )}
 
-        {/* Floating Waypoint Info Card */}
-        {selectedWaypoint && (
-          <div className="absolute top-2 left-2 right-2 sm:right-auto sm:max-w-xs z-20 bg-white/95 backdrop-blur rounded-xl border border-[#D9D4C7] p-2.5 shadow-lg animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-start justify-between gap-1.5">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <span className="text-base">
-                  {selectedWaypoint.type === 'start'
-                    ? '🟢'
-                    : selectedWaypoint.type === 'end'
-                    ? '🏁'
-                    : selectedWaypoint.type === 'camp'
-                    ? '⛺'
-                    : selectedWaypoint.type === 'pass'
-                    ? '🏔️'
-                    : selectedWaypoint.type === 'photo'
-                    ? '📸'
-                    : '📍'}
-                </span>
-                <div className="min-w-0">
-                  <h4 className="text-xs font-bold text-[#2C2C2C] truncate">
-                    {selectedWaypoint.name}
-                  </h4>
-                  {selectedWaypoint.ele && (
-                    <p className="text-[10px] text-[#5A5A40] font-mono">
-                      海拔 {selectedWaypoint.ele}m
-                    </p>
-                  )}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedWaypoint(null)}
-                className="text-[#7A7465] hover:text-[#2C2C2C] p-0.5 rounded cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
+        {/* Loading Spinner */}
+        {loading && (
+          <div className="absolute inset-0 z-20 bg-white/70 backdrop-blur-xs flex flex-col items-center justify-center">
+            <div className="w-8 h-8 border-3 border-[#5A5A40] border-t-transparent rounded-full animate-spin mb-2" />
+            <span className="text-xs text-[#5A5A40] font-medium">
+              正在秒级解析两步路轨迹数据...
+            </span>
+          </div>
+        )}
 
-            {selectedWaypoint.imageUrl && (
-              <div className="mt-2 rounded-lg overflow-hidden max-h-32 border border-[#E5E1D8]">
-                <img
-                  src={selectedWaypoint.imageUrl}
-                  alt={selectedWaypoint.name}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            )}
-
+        {/* Error Alert */}
+        {errorMsg && (
+          <div className="absolute top-3 left-3 right-3 z-30 bg-[#FDE8E8] text-[#B33A3A] p-2.5 rounded-xl border border-[#F8B4B4] text-xs flex items-center justify-between shadow-md">
+            <span>{errorMsg}</span>
             <button
               type="button"
-              onClick={() => onFocusNodeByTitle?.(selectedWaypoint.name)}
-              className="w-full mt-2 py-1 bg-[#5A5A40] hover:bg-[#484833] text-white text-[11px] font-bold rounded-lg transition shadow-2xs flex items-center justify-center gap-1 cursor-pointer"
+              onClick={() => setErrorMsg(null)}
+              className="font-bold text-[#B33A3A] px-1"
             >
-              <CheckCircle2 className="w-3 h-3" />
-              <span>在思维导图中高亮</span>
+              ✕
             </button>
           </div>
         )}
       </div>
 
-      {/* Bottom Elevation Profile Chart */}
-      {track && (
+      {/* Two-Step Outdoor Elevation Profile Chart (100% Full Width) */}
+      {track && track.allPoints.length > 0 && (
         <ElevationChart
           points={track.allPoints}
           totalDistanceKm={track.totalDistanceKm}
@@ -575,8 +611,8 @@ export const RouteMapPanel: React.FC<RouteMapPanelProps> = ({
           elevationLoss={track.elevationLoss}
           maxElevation={track.maxElevation}
           minElevation={track.minElevation}
-          hoveredPoint={hoveredPoint}
           onHoverPoint={setHoveredPoint}
+          hoveredPoint={hoveredPoint}
         />
       )}
     </div>
