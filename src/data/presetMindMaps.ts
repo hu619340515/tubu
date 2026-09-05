@@ -657,6 +657,19 @@ export const DEFAULT_TRIP_MINDMAP: MindMapNode = {
 
 export const PRESET_MINDMAPS: MindMapPreset[] = [
   {
+    id: 'empty-preset',
+    title: '空白行程导图 (纯净从零自建)',
+    description: '仅保留单中心规划根节点，无任何子节点',
+    root: {
+      id: 'empty-root',
+      title: '行程规划导图',
+      description: '点击编辑或添加行程节点',
+      tag: '规划',
+      color: '#5A5A40',
+      children: [],
+    },
+  },
+  {
     id: 'genye-preset',
     title: '2026 格聂徒步全案导图 (完整版)',
     description: '包含时间线、高海拔营地、硬核检查、高反撤退与装备要点',

@@ -61,28 +61,29 @@ export const mindMapStorageService = {
       console.error('Failed to read mind map from localStorage:', e);
     }
 
-    // Fallback based on trip destination / title
-    const titleLower = (listTitle || '').toLowerCase();
-    const destLower = (destination || '').toLowerCase();
-
-    if (titleLower.includes('格聂') || destLower.includes('格聂')) {
+    // Only official default lists of wangzai retain preset templates if empty
+    if (listId === 'list-user-wangzai-1') {
       const initial = JSON.parse(JSON.stringify(GENYE_2026_MINDMAP));
       this.saveMindMap(listId, initial);
       return initial;
     }
 
-    if (titleLower.includes('武功山') || destLower.includes('武功山')) {
+    if (listId === 'list-user-wangzai-2') {
       const initial = JSON.parse(JSON.stringify(WUGONGSHAN_MINDMAP));
       this.saveMindMap(listId, initial);
       return initial;
     }
 
-    // Default template
-    const initial = JSON.parse(JSON.stringify(DEFAULT_TRIP_MINDMAP));
-    if (listTitle) {
-      initial.title = `${listTitle} · 行程导图`;
-    }
-    this.saveMindMap(listId, initial);
+    // For ALL other new / custom lists: default is a clean, EMPTY mind map
+    const initial: MindMapNode = {
+      id: `root-${listId}`,
+      title: listTitle || '行程规划导图',
+      description: destination ? `目的地：${destination}` : '点击编辑或添加行程节点',
+      tag: '规划',
+      color: '#5A5A40',
+      children: [],
+    };
+    this.saveMindMap(listId, initial, []);
     return initial;
   },
 
@@ -143,9 +144,24 @@ export const mindMapStorageService = {
     }
   },
 
-  resetToPreset(listId: string, presetId: string): MindMapNode {
+  resetToPreset(listId: string, presetId: string, listTitle?: string): MindMapNode {
+    if (presetId === 'empty-preset') {
+      const emptyRoot: MindMapNode = {
+        id: `root-${listId}`,
+        title: listTitle || '行程规划导图',
+        description: '点击编辑或添加行程节点',
+        tag: '规划',
+        color: '#5A5A40',
+        children: [],
+      };
+      this.saveMindMap(listId, emptyRoot, []);
+      return emptyRoot;
+    }
     const matched = PRESET_MINDMAPS.find((p) => p.id === presetId) || PRESET_MINDMAPS[0];
     const cloned = JSON.parse(JSON.stringify(matched.root));
+    if (listTitle && (presetId === 'generic-preset' || presetId === 'empty-preset')) {
+      cloned.title = `${listTitle} · 行程导图`;
+    }
     this.saveMindMap(listId, cloned);
     return cloned;
   },

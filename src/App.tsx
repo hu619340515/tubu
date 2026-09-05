@@ -552,7 +552,7 @@ export default function App() {
                 <Share2 className="w-4 h-4" />
               </span>
               <span>
-                正在浏览由 <strong>{sharedBanner.creatorName}</strong> 分享的徒步清单：
+                正在浏览由 <strong>{sharedBanner.creatorName}</strong> 分享的行程规划：
                 <span className="text-[#EAE7DF] ml-1 font-semibold">
                   “{sharedBanner.title}”
                 </span>
@@ -565,7 +565,7 @@ export default function App() {
                 className="px-3.5 py-1.5 bg-[#D27D59] hover:bg-[#be6e4c] text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5"
               >
                 <FolderPlus className="w-3.5 h-3.5" />
-                <span>一键导入为我的专属清单</span>
+                <span>一键导入为我的行程规划</span>
               </button>
               <button
                 type="button"
@@ -685,6 +685,7 @@ export default function App() {
 
               <div className="flex-1 w-full h-full min-h-0 relative">
                 <MindMapCanvas
+                  key={activeList.id}
                   listId={activeList.id}
                   listTitle={activeList.title}
                   destination={activeList.destination}
@@ -819,10 +820,10 @@ export default function App() {
             </div>
             <div>
               <h2 className="text-lg font-serif font-bold text-[#2C2C2C]">
-                专属清单库为空
+                暂无行程规划
               </h2>
               <p className="text-xs text-[#7A7465] mt-1 max-w-sm mx-auto">
-                欢迎来到【溜个弯】！您可以立即从经典路线模版创建，或自由从零规划您的下一趟山野行囊。
+                欢迎来到【溜个弯】！您可以立即从经典路线模版创建，或自由从零规划您的下一趟山野行程。
               </p>
             </div>
             <button
@@ -831,7 +832,7 @@ export default function App() {
               className="px-5 py-2.5 bg-[#5A5A40] hover:bg-[#484833] text-white text-xs font-bold rounded-xl shadow-xs transition inline-flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
-              <span>创建第一张徒步专属清单</span>
+              <span>新建第一个行程规划</span>
             </button>
           </div>
         )}

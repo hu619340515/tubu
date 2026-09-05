@@ -13,6 +13,12 @@ import {
 import { HikingList, TrailType } from '../types';
 import { TEMPLATE_LISTS, DEFAULT_CATEGORIES, POPULAR_MOUNTAINS } from '../data/defaultTemplates';
 import { shareService } from '../services/shareService';
+import { mindMapStorageService } from '../services/mindMapStorageService';
+import {
+  GENYE_2026_MINDMAP,
+  WUGONGSHAN_MINDMAP,
+  DEFAULT_TRIP_MINDMAP,
+} from '../data/presetMindMaps';
 
 interface NewListModalProps {
   isOpen: boolean;
@@ -53,6 +59,17 @@ export const NewListModal: React.FC<NewListModalProps> = ({
       isFavorite: false,
     };
 
+    // Initialize mind map for template
+    if (tpl.title.includes('格聂') || tpl.destination.includes('格聂')) {
+      mindMapStorageService.saveMindMap(newList.id, JSON.parse(JSON.stringify(GENYE_2026_MINDMAP)), []);
+    } else if (tpl.title.includes('武功山') || tpl.destination.includes('武功山')) {
+      mindMapStorageService.saveMindMap(newList.id, JSON.parse(JSON.stringify(WUGONGSHAN_MINDMAP)), []);
+    } else {
+      const defaultMap = JSON.parse(JSON.stringify(DEFAULT_TRIP_MINDMAP));
+      defaultMap.title = `${tpl.title} · 行程导图`;
+      mindMapStorageService.saveMindMap(newList.id, defaultMap, []);
+    }
+
     onAddList(newList);
     onClose();
   };
@@ -80,6 +97,17 @@ export const NewListModal: React.FC<NewListModalProps> = ({
       updatedAt: Date.now(),
       isFavorite: false,
     };
+
+    // Explicitly initialize with an EMPTY mind map (only root node, children is empty [])
+    const emptyMindMap = {
+      id: `root-${newList.id}`,
+      title: newList.title,
+      description: destination.trim() ? `目的地：${destination.trim()} · ${newList.durationDays}日` : '点击编辑或添加行程节点',
+      tag: '规划',
+      color: '#5A5A40',
+      children: [],
+    };
+    mindMapStorageService.saveMindMap(newList.id, emptyMindMap, [], 'timeline-flow');
 
     onAddList(newList);
     onClose();
@@ -126,7 +154,7 @@ export const NewListModal: React.FC<NewListModalProps> = ({
               <FilePlus className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-base font-serif font-bold tracking-tight">新建专属徒步清单</h2>
+              <h2 className="text-base font-serif font-bold tracking-tight">新建行程规划</h2>
               <p className="text-xs text-[#DCD8CD]">模版预设、从零自建或导入队友分享</p>
             </div>
           </div>
@@ -182,7 +210,7 @@ export const NewListModal: React.FC<NewListModalProps> = ({
           {tab === 'template' && (
             <div className="space-y-3">
               <p className="text-xs text-[#7A7465]">
-                由资深户外驴友团队严选校对的专业清单模版，一键载入：
+                由资深户外驴友团队严选校对的专业行程规划模版，一键载入：
               </p>
               {TEMPLATE_LISTS.map((tpl, idx) => (
                 <div
@@ -222,7 +250,7 @@ export const NewListModal: React.FC<NewListModalProps> = ({
           {tab === 'custom' && (
             <form onSubmit={handleCreateCustom} className="space-y-3">
               <div>
-                <label className="text-xs font-bold text-[#5A5A40] block mb-1">清单标题</label>
+                <label className="text-xs font-bold text-[#5A5A40] block mb-1">行程规划标题</label>
                 <input
                   type="text"
                   required
@@ -275,7 +303,7 @@ export const NewListModal: React.FC<NewListModalProps> = ({
                 type="submit"
                 className="w-full py-2.5 bg-[#5A5A40] hover:bg-[#484833] text-white font-bold text-xs rounded-xl shadow-xs transition mt-3"
               >
-                创建空白清单
+                创建空白行程规划
               </button>
             </form>
           )}
@@ -306,7 +334,7 @@ export const NewListModal: React.FC<NewListModalProps> = ({
                 type="submit"
                 className="w-full py-2.5 bg-[#5A5A40] hover:bg-[#484833] text-white font-bold text-xs rounded-xl shadow-xs transition"
               >
-                解析并导入为我的专属清单
+                解析并导入为我的行程规划
               </button>
             </form>
           )}

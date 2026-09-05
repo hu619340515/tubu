@@ -1906,7 +1906,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
           }}
           onExportPng={handleExportPng}
           onSelectPreset={(presetId) => {
-            const cloned = mindMapStorageService.resetToPreset(listId, presetId);
+            const cloned = mindMapStorageService.resetToPreset(listId, presetId, listTitle);
             const freshEdges = generateInitialEdges(cloned);
             pushState(cloned, freshEdges);
             setTimeout(() => handleFitView(), 50);
