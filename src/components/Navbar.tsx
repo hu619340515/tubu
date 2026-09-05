@@ -10,6 +10,7 @@ import {
   ListTodo,
   WifiOff,
   GitFork,
+  Trash2,
 } from 'lucide-react';
 import { User, HikingList } from '../types';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
@@ -31,6 +32,7 @@ interface NavbarProps {
   onOpenWeather: () => void;
   onOpenAdmin?: () => void;
   onLogout?: () => void;
+  onDeleteList?: (id: string) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -45,6 +47,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenWeather,
   onOpenAdmin,
   onLogout,
+  onDeleteList,
 }) => {
   const isOnline = useOnlineStatus();
   const { isInstallable, install } = usePWAInstall();
@@ -115,11 +118,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onChange={(e) => onSelectList(e.target.value)}
                 className="w-full pl-2.5 pr-7 py-1 bg-white border border-[#D9D4C7] hover:border-[#5A5A40] text-xs font-medium text-[#2C2C2C] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#5A5A40] appearance-none cursor-pointer truncate shadow-2xs"
               >
-                {lists.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.title}
-                  </option>
-                ))}
+                {lists.length === 0 ? (
+                  <option value="">暂无规划路线</option>
+                ) : (
+                  lists.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.title}
+                    </option>
+                  ))
+                )}
               </select>
               <ChevronDown className="w-3 h-3 text-[#7A7465] absolute right-2 top-2.5 pointer-events-none" />
             </div>
@@ -127,11 +134,30 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               type="button"
               onClick={onOpenNewList}
-              className="p-1 bg-[#5A5A40] text-white hover:bg-[#484833] rounded-xl transition shadow-2xs"
-              title="新建行程清单"
+              className="p-1 bg-[#5A5A40] text-white hover:bg-[#484833] rounded-xl transition shadow-2xs cursor-pointer"
+              title="新建行程规划"
             >
               <Plus className="w-3.5 h-3.5" />
             </button>
+
+            {activeList && onDeleteList && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `确定要删除规划【${activeList.title}】吗？此操作将清除该规划的所有导图与装备清单，且无法撤销。`
+                    )
+                  ) {
+                    onDeleteList(activeList.id);
+                  }
+                }}
+                className="p-1 text-[#7A7465] hover:text-[#B33A3A] hover:bg-[#FDF2F0] border border-[#D9D4C7] hover:border-[#F8B4B4] rounded-xl transition shadow-2xs cursor-pointer"
+                title="删除当前规划"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
 

@@ -18,11 +18,14 @@ import {
   Edit3,
   Check,
   X,
+  Trash2,
 } from 'lucide-react';
 
 import { User, HikingList, GearItem, Category, TrailType, SiteAnnouncement } from './types';
 import { storageService } from './services/storageService';
 import { shareService } from './services/shareService';
+import { mindMapStorageService } from './services/mindMapStorageService';
+import { trackStorageService } from './services/trackStorageService';
 import { Navbar, ActiveViewMode } from './components/Navbar';
 import { ListHeader } from './components/ListHeader';
 import { CategorySection } from './components/CategorySection';
@@ -396,6 +399,11 @@ export default function App() {
   };
 
   const handleDeleteList = (id: string) => {
+    // 1. Delete associated mind map
+    mindMapStorageService.deleteMindMap(id);
+    // 2. Delete associated route track
+    trackStorageService.deleteTrack(id);
+    // 3. Remove list from user lists
     const remaining = lists.filter((l) => l.id !== id);
     saveLists(remaining);
     if (remaining.length > 0) {
@@ -513,6 +521,7 @@ export default function App() {
         onOpenWeather={() => setIsWeatherOpen(true)}
         onOpenAdmin={() => setIsAdminOpen(true)}
         onLogout={handleLogout}
+        onDeleteList={handleDeleteList}
       />
 
       {/* 2. Site Announcement Banner */}
@@ -651,6 +660,26 @@ export default function App() {
                       横向日期线性推进 · 当日事项纵向串联 · 支持卡片自由拖拽平移、框选多选、拉线连接与防重叠自动整理
                     </p>
                   </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `确定要删除规划【${activeList.title}】吗？此操作将清除该规划的所有导图、装备清单与轨迹数据，且无法撤销。`
+                        )
+                      ) {
+                        handleDeleteList(activeList.id);
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs text-[#7A7465] hover:text-[#B33A3A] hover:bg-[#FDF2F0] rounded-xl border border-[#D9D4C7] hover:border-[#F8B4B4] transition shadow-2xs font-medium cursor-pointer"
+                    title="删除此规划"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">删除规划</span>
+                  </button>
                 </div>
               </div>
 

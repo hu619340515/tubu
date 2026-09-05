@@ -11,14 +11,20 @@ import {
   Flag,
   Navigation,
   CheckCircle2,
+  Trash2,
+  Compass,
 } from 'lucide-react';
 import { ParsedTrack, TrackPoint, TrackWaypoint } from '../../types/track';
 import { trackParserService } from '../../services/trackParserService';
+import { trackStorageService } from '../../services/trackStorageService';
 import { wgs84ToGcj02 } from '../../services/coordTransform';
 import { ElevationChart } from './ElevationChart';
 import { ImageLightboxModal, LightboxImageInfo } from '../common/ImageLightboxModal';
 
 interface RouteMapPanelProps {
+  listId: string;
+  listTitle?: string;
+  destination?: string;
   onClose?: () => void;
 }
 
@@ -95,6 +101,9 @@ function createDivIcon(emoji: string, bgClass: string, label?: string): L.DivIco
 }
 
 export const RouteMapPanelComponent: React.FC<RouteMapPanelProps> = ({
+  listId,
+  listTitle,
+  destination,
   onClose,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -114,9 +123,52 @@ export const RouteMapPanelComponent: React.FC<RouteMapPanelProps> = ({
   const [lightboxImage, setLightboxImage] = useState<LightboxImageInfo | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
-  // Initialize Leaflet Map
+  // Load track specific to current listId
   useEffect(() => {
-    if (!mapContainerRef.current || mapInstanceRef.current) return;
+    let active = true;
+    setLoading(true);
+    setErrorMsg(null);
+    hasFittedBoundsRef.current = false;
+
+    trackStorageService
+      .getTrack(listId, listTitle, destination)
+      .then((loadedTrack) => {
+        if (!active) return;
+        setTrack(loadedTrack);
+        setLoading(false);
+      })
+      .catch((e) => {
+        if (!active) return;
+        console.warn('[RouteMap] Failed to load track:', e);
+        setTrack(null);
+        setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [listId, listTitle, destination]);
+
+  // Initialize or cleanup Leaflet Map based on track existence
+  useEffect(() => {
+    if (!track) {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+        baseTileLayerRef.current = null;
+        annoTileLayerRef.current = null;
+        trackLayerGroupRef.current = null;
+        hoverMarkerRef.current = null;
+      }
+      return;
+    }
+
+    if (!mapContainerRef.current) return;
+
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.invalidateSize();
+      return;
+    }
 
     const map = L.map(mapContainerRef.current, {
       zoomControl: false,
@@ -170,31 +222,18 @@ export const RouteMapPanelComponent: React.FC<RouteMapPanelProps> = ({
     const ro = new ResizeObserver(() => {
       map.invalidateSize();
     });
-    if (mapContainerRef.current) {
-      ro.observe(mapContainerRef.current);
-    }
-
-    // Auto-load built-in Genye demo track
-    trackParserService
-      .loadBuiltinGenyeTrack()
-      .then((parsed) => {
-        setTrack(parsed);
-        setLoading(false);
-        requestAnimationFrame(() => {
-          map.invalidateSize();
-        });
-      })
-      .catch((e) => {
-        console.warn('Failed to load demo track:', e);
-        setLoading(false);
-      });
+    ro.observe(mapContainerRef.current);
 
     return () => {
       ro.disconnect();
       map.remove();
       mapInstanceRef.current = null;
+      baseTileLayerRef.current = null;
+      annoTileLayerRef.current = null;
+      trackLayerGroupRef.current = null;
+      hoverMarkerRef.current = null;
     };
-  }, []);
+  }, [track]);
 
   // Global bulletproof click listener for popup photo lightbox (Capture phase)
   useEffect(() => {
@@ -491,33 +530,67 @@ export const RouteMapPanelComponent: React.FC<RouteMapPanelProps> = ({
   }, [hoveredPoint]);
 
   // File Upload / Drop Handler
-  const handleFile = useCallback(async (file: File) => {
+  const handleFile = useCallback(
+    async (file: File) => {
+      setLoading(true);
+      setErrorMsg(null);
+      try {
+        const name = file.name.toLowerCase();
+        let parsed: ParsedTrack;
+        if (name.endsWith('.kmz')) {
+          const buf = await file.arrayBuffer();
+          parsed = await trackParserService.parseKmz(buf);
+        } else if (name.endsWith('.kml')) {
+          const text = await file.text();
+          parsed = trackParserService.parseKml(text);
+        } else if (name.endsWith('.gpx')) {
+          const text = await file.text();
+          parsed = trackParserService.parseGpx(text);
+        } else {
+          throw new Error('仅支持 .kmz、.kml 或 .gpx 格式的轨迹文件');
+        }
+
+        hasFittedBoundsRef.current = false;
+        await trackStorageService.saveTrack(listId, parsed);
+        setTrack(parsed);
+        setLoading(false);
+      } catch (e: any) {
+        console.error(e);
+        setErrorMsg(e.message || '解析轨迹文件失败');
+        setLoading(false);
+      }
+    },
+    [listId]
+  );
+
+  const handleLoadGenyePreset = useCallback(async () => {
     setLoading(true);
     setErrorMsg(null);
     try {
-      const name = file.name.toLowerCase();
-      let parsed: ParsedTrack;
-      if (name.endsWith('.kmz')) {
-        const buf = await file.arrayBuffer();
-        parsed = await trackParserService.parseKmz(buf);
-      } else if (name.endsWith('.kml')) {
-        const text = await file.text();
-        parsed = trackParserService.parseKml(text);
-      } else if (name.endsWith('.gpx')) {
-        const text = await file.text();
-        parsed = trackParserService.parseGpx(text);
-      } else {
-        throw new Error('仅支持 .kmz、.kml 或 .gpx 格式的轨迹文件');
-      }
-
-      setTrack(parsed);
+      hasFittedBoundsRef.current = false;
+      const genyeTrack = await trackParserService.loadBuiltinGenyeTrack();
+      await trackStorageService.saveTrack(listId, genyeTrack);
+      setTrack(genyeTrack);
       setLoading(false);
     } catch (e: any) {
-      console.error(e);
-      setErrorMsg(e.message || '解析轨迹文件失败');
+      setErrorMsg('载入格聂经典轨迹失败，请检查网络');
       setLoading(false);
     }
-  }, []);
+  }, [listId]);
+
+  const handleDeleteTrack = useCallback(async () => {
+    if (!window.confirm('确定要移除当前规划的轨迹地图数据吗？移除后可随时重新导入。')) {
+      return;
+    }
+    setLoading(true);
+    try {
+      await trackStorageService.deleteTrack(listId);
+      setTrack(null);
+      hasFittedBoundsRef.current = false;
+    } finally {
+      setLoading(false);
+    }
+  }, [listId]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -547,6 +620,8 @@ export const RouteMapPanelComponent: React.FC<RouteMapPanelProps> = ({
     mapInstanceRef.current.fitBounds(L.latLngBounds(latLngs), { padding: [30, 30] });
   };
 
+  const isGenyeRoute = (listTitle || '').includes('格聂') || (destination || '').includes('格聂');
+
   return (
     <div
       className="flex flex-col w-full h-full bg-[#FAF8F5] border-r border-[#D9D4C7] relative overflow-hidden select-none"
@@ -554,8 +629,8 @@ export const RouteMapPanelComponent: React.FC<RouteMapPanelProps> = ({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {/* Header bar */}
-      <div className="flex items-center justify-between gap-2 px-3 py-2 bg-white/95 backdrop-blur border-b border-[#D9D4C7] shrink-0 z-10">
+      {/* 1. Header Bar */}
+      <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 bg-white/95 backdrop-blur border-b border-[#D9D4C7] shrink-0 z-10">
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-7 h-7 rounded-lg bg-[#5A5A40] flex items-center justify-center text-white shrink-0 shadow-2xs">
             <Navigation className="w-3.5 h-3.5" />
@@ -563,7 +638,7 @@ export const RouteMapPanelComponent: React.FC<RouteMapPanelProps> = ({
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <h3 className="text-xs font-bold text-[#2C2C2C] truncate">
-                {track?.title || '两步路轨迹地图'}
+                {track ? track.title || `${listTitle || '路线'} · 轨迹地图` : '路线轨迹地图'}
               </h3>
               {track && (
                 <span className="text-[10px] bg-[#FAF3E0] text-[#B87A28] px-1.5 py-0.2 rounded font-bold shrink-0">
@@ -576,73 +651,87 @@ export const RouteMapPanelComponent: React.FC<RouteMapPanelProps> = ({
 
         {/* Right Action Buttons */}
         <div className="flex items-center gap-1 shrink-0">
-          {/* Layer Selector */}
-          <div className="flex items-center bg-[#FAF8F5] border border-[#D9D4C7] p-0.5 rounded-lg text-[10px] font-bold text-[#7A7465]">
-            <button
-              type="button"
-              onClick={() => setActiveLayer('satellite')}
-              className={`px-1.5 py-0.5 rounded transition ${
-                activeLayer === 'satellite'
-                  ? 'bg-[#5A5A40] text-white shadow-2xs'
-                  : 'hover:text-[#2C2C2C]'
-              }`}
-              title="高德卫星影像（极速实景）"
-            >
-              卫星
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveLayer('topo')}
-              className={`px-1.5 py-0.5 rounded transition ${
-                activeLayer === 'topo'
-                  ? 'bg-[#5A5A40] text-white shadow-2xs'
-                  : 'hover:text-[#2C2C2C]'
-              }`}
-              title="高德地形晕渲（等高线地貌）"
-            >
-              等高线
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveLayer('osm')}
-              className={`px-1.5 py-0.5 rounded transition ${
-                activeLayer === 'osm'
-                  ? 'bg-[#5A5A40] text-white shadow-2xs'
-                  : 'hover:text-[#2C2C2C]'
-              }`}
-              title="高德标准地图（户外路网地名）"
-            >
-              地图
-            </button>
-          </div>
+          {track && (
+            <>
+              {/* Layer Selector */}
+              <div className="flex items-center bg-[#FAF8F5] border border-[#D9D4C7] p-0.5 rounded-lg text-[10px] font-bold text-[#7A7465]">
+                <button
+                  type="button"
+                  onClick={() => setActiveLayer('satellite')}
+                  className={`px-1.5 py-0.5 rounded transition cursor-pointer ${
+                    activeLayer === 'satellite'
+                      ? 'bg-[#5A5A40] text-white shadow-2xs'
+                      : 'hover:text-[#2C2C2C]'
+                  }`}
+                  title="高德卫星影像（实景地貌）"
+                >
+                  卫星
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveLayer('topo')}
+                  className={`px-1.5 py-0.5 rounded transition cursor-pointer ${
+                    activeLayer === 'topo'
+                      ? 'bg-[#5A5A40] text-white shadow-2xs'
+                      : 'hover:text-[#2C2C2C]'
+                  }`}
+                  title="高德地形晕渲（等高线）"
+                >
+                  等高线
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveLayer('osm')}
+                  className={`px-1.5 py-0.5 rounded transition cursor-pointer ${
+                    activeLayer === 'osm'
+                      ? 'bg-[#5A5A40] text-white shadow-2xs'
+                      : 'hover:text-[#2C2C2C]'
+                  }`}
+                  title="高德标准地图（路网地名）"
+                >
+                  地图
+                </button>
+              </div>
 
-          {/* Fit Bounds */}
-          <button
-            type="button"
-            onClick={handleFitBounds}
-            className="p-1 hover:bg-[#FAF8F5] border border-transparent hover:border-[#D9D4C7] text-[#5A5A40] rounded-lg transition cursor-pointer"
-            title="居中适应全景"
-          >
-            <Maximize2 className="w-3.5 h-3.5" />
-          </button>
+              {/* Fit Bounds */}
+              <button
+                type="button"
+                onClick={handleFitBounds}
+                className="p-1 hover:bg-[#FAF8F5] border border-transparent hover:border-[#D9D4C7] text-[#5A5A40] rounded-lg transition cursor-pointer"
+                title="居中全屏适应"
+              >
+                <Maximize2 className="w-3.5 h-3.5" />
+              </button>
 
-          {/* Upload Track File Button */}
-          <label
-            className="p-1 hover:bg-[#FAF8F5] border border-transparent hover:border-[#D9D4C7] text-[#5A5A40] rounded-lg transition cursor-pointer flex items-center"
-            title="导入两步路轨迹 (.kmz/.kml/.gpx)"
-          >
-            <Upload className="w-3.5 h-3.5" />
-            <input
-              type="file"
-              accept=".kmz,.kml,.gpx"
-              className="hidden"
-              onChange={(e) => {
-                if (e.target.files && e.target.files[0]) {
-                  handleFile(e.target.files[0]);
-                }
-              }}
-            />
-          </label>
+              {/* Replace Track Button */}
+              <label
+                className="p-1 hover:bg-[#FAF8F5] border border-transparent hover:border-[#D9D4C7] text-[#5A5A40] rounded-lg transition cursor-pointer flex items-center"
+                title="重新导入/更换轨迹 (.kmz/.kml/.gpx)"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <input
+                  type="file"
+                  accept=".kmz,.kml,.gpx"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      handleFile(e.target.files[0]);
+                    }
+                  }}
+                />
+              </label>
+
+              {/* Delete Track Button */}
+              <button
+                type="button"
+                onClick={handleDeleteTrack}
+                className="p-1 hover:bg-[#FDE8E8] text-[#7A7465] hover:text-[#B33A3A] rounded-lg transition cursor-pointer"
+                title="移除当前轨迹"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </>
+          )}
 
           {/* Close Panel Button */}
           {onClose && (
@@ -658,25 +747,75 @@ export const RouteMapPanelComponent: React.FC<RouteMapPanelProps> = ({
         </div>
       </div>
 
-      {/* Main Map Container */}
+      {/* 2. Main Area: Track Map or Add Track Button Placeholder */}
       <div className="flex-1 w-full min-h-0 relative">
-        <div ref={mapContainerRef} className="w-full h-full relative" />
+        {track ? (
+          <div ref={mapContainerRef} className="w-full h-full relative" />
+        ) : (
+          /* Empty Track Placeholder: "添加轨迹" Button View */
+          <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center overflow-y-auto">
+            <div className="max-w-sm w-full p-6 sm:p-8 bg-white rounded-3xl border-2 border-dashed border-[#D9D4C7] hover:border-[#5A5A40] transition shadow-xs flex flex-col items-center space-y-4">
+              <div className="w-14 h-14 rounded-2xl bg-[#F0EEE8] text-[#5A5A40] flex items-center justify-center shadow-2xs">
+                <Compass className="w-7 h-7 stroke-[1.8]" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold text-[#2C2C2C]">
+                  暂未导入轨迹数据
+                </h4>
+                <p className="text-[11px] text-[#7A7465] leading-relaxed">
+                  当前规划尚未绑定 GPS 路线轨迹。导入后将自动生成卫星实景地图、沿途打卡点与海拔高程剖面图。
+                </p>
+              </div>
+
+              {/* Primary "Add Track" Button */}
+              <label className="w-full flex items-center justify-center gap-2 px-5 py-2.5 bg-[#5A5A40] hover:bg-[#484833] text-white text-xs font-bold rounded-xl transition shadow-xs cursor-pointer">
+                <Upload className="w-4 h-4" />
+                <span>添加轨迹 (KMZ / KML / GPX)</span>
+                <input
+                  type="file"
+                  accept=".kmz,.kml,.gpx"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      handleFile(e.target.files[0]);
+                    }
+                  }}
+                />
+              </label>
+
+              <div className="flex items-center gap-1.5 text-[10px] text-[#A39E93]">
+                <span>支持拖拽两步路、六只脚、Google Earth 导出的轨迹文件到此处</span>
+              </div>
+
+              {isGenyeRoute && (
+                <button
+                  type="button"
+                  onClick={handleLoadGenyePreset}
+                  className="text-[11px] font-semibold text-[#D27D59] hover:underline flex items-center gap-1 pt-1 cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>快速载入格聂经典全景轨迹预设</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Drag Over Overlay */}
         {isDragOver && (
-          <div className="absolute inset-0 z-30 bg-[#5A5A40]/80 backdrop-blur-xs flex flex-col items-center justify-center text-white border-2 border-dashed border-white m-3 rounded-2xl pointer-events-none">
+          <div className="absolute inset-0 z-30 bg-[#5A5A40]/85 backdrop-blur-xs flex flex-col items-center justify-center text-white border-2 border-dashed border-white m-3 rounded-2xl pointer-events-none">
             <Upload className="w-10 h-10 mb-2 animate-bounce" />
-            <p className="text-sm font-bold">释放鼠标导入轨迹</p>
+            <p className="text-sm font-bold">释放鼠标导入轨迹文件</p>
             <p className="text-xs text-white/80">支持两步路 KMZ、KML、GPX 文件</p>
           </div>
         )}
 
         {/* Loading Spinner */}
         {loading && (
-          <div className="absolute inset-0 z-20 bg-white/70 backdrop-blur-xs flex flex-col items-center justify-center">
+          <div className="absolute inset-0 z-20 bg-white/75 backdrop-blur-xs flex flex-col items-center justify-center">
             <div className="w-8 h-8 border-3 border-[#5A5A40] border-t-transparent rounded-full animate-spin mb-2" />
             <span className="text-xs text-[#5A5A40] font-medium">
-              正在秒级解析两步路轨迹数据...
+              正在处理两步路轨迹数据...
             </span>
           </div>
         )}
@@ -688,7 +827,7 @@ export const RouteMapPanelComponent: React.FC<RouteMapPanelProps> = ({
             <button
               type="button"
               onClick={() => setErrorMsg(null)}
-              className="font-bold text-[#B33A3A] px-1"
+              className="font-bold text-[#B33A3A] px-1 cursor-pointer"
             >
               ✕
             </button>
@@ -696,7 +835,7 @@ export const RouteMapPanelComponent: React.FC<RouteMapPanelProps> = ({
         )}
       </div>
 
-      {/* Two-Step Outdoor Elevation Profile Chart (100% Full Width) */}
+      {/* 3. Elevation Profile Chart (Only shown when track is present) */}
       {track && track.allPoints.length > 0 && (
         <ElevationChart
           points={track.allPoints}
@@ -710,7 +849,7 @@ export const RouteMapPanelComponent: React.FC<RouteMapPanelProps> = ({
         />
       )}
 
-      {/* Full-Screen Large Photo Lightbox Modal */}
+      {/* 4. Full-Screen Photo Lightbox Modal */}
       <ImageLightboxModal
         imageInfo={lightboxImage}
         onClose={() => setLightboxImage(null)}

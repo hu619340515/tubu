@@ -35,6 +35,7 @@ const DEFAULT_DB = {
   ],
   lists: {},
   mindmaps: {},
+  tracks: {},
   announcement: {
     id: 'announcement-default',
     enabled: true,
@@ -63,6 +64,7 @@ function readDB() {
         }
         if (!data.lists) data.lists = {};
         if (!data.mindmaps) data.mindmaps = {};
+        if (!data.tracks) data.tracks = {};
         if (!data.announcement) data.announcement = DEFAULT_DB.announcement;
         return data;
       }
@@ -138,6 +140,8 @@ app.post('/api/auth/register', (req, res) => {
   };
 
   db.users.push(newUser);
+  if (!db.lists) db.lists = {};
+  db.lists[newUser.id] = [];
   writeDB(db);
 
   const { passwordHash, ...safeUser } = newUser;
@@ -321,21 +325,17 @@ app.get('/api/lists/:userId', (req, res) => {
   const { userId } = req.params;
   const db = readDB();
   if (!db.lists) db.lists = {};
-  let userLists = db.lists[userId] || [];
+  let userLists = db.lists[userId];
 
-  const totalItems = userLists.reduce(
-    (sum, l) => sum + (Array.isArray(l.items) ? l.items.length : 0),
-    0
-  );
-
-  // If user has no lists or all lists have 0 items, populate complete default lists
-  if (userLists.length === 0 || totalItems === 0) {
+  // ONLY for user-wangzai: if lists have never been initialized, populate default template lists
+  if (userId === 'user-wangzai' && (!userLists || userLists.length === 0)) {
     userLists = getDefaultTemplateLists(userId);
     db.lists[userId] = userLists;
     writeDB(db);
   }
 
-  res.json(userLists);
+  // For all other users: return whatever they have (if none, return empty array [])
+  res.json(userLists || []);
 });
 
 app.post('/api/lists/:userId', (req, res) => {
@@ -348,28 +348,12 @@ app.post('/api/lists/:userId', (req, res) => {
   const db = readDB();
   if (!db.lists) db.lists = {};
 
-  const existingLists = db.lists[userId] || [];
-  const existingTotalItems = existingLists.reduce(
-    (sum, l) => sum + (Array.isArray(l.items) ? l.items.length : 0),
-    0
-  );
-  const incomingTotalItems = lists.reduce(
-    (sum, l) => sum + (Array.isArray(l.items) ? l.items.length : 0),
-    0
-  );
-
-  // Guard against accidental empty wipe
-  if (existingTotalItems > 5 && incomingTotalItems === 0 && lists.length <= 1) {
-    console.warn(`[Lists] Guarded against accidental wipe for user ${userId}`);
-    return res.json({ success: true, count: existingLists.length, guarded: true });
-  }
-
   db.lists[userId] = lists;
   writeDB(db);
   res.json({ success: true, count: lists.length });
 });
 
-// 4. Mind Map Persistence (GET & POST)
+// 4. Mind Map Persistence (GET, POST & DELETE)
 app.get('/api/mindmap/:listId', (req, res) => {
   const { listId } = req.params;
   const db = readDB();
@@ -395,6 +379,48 @@ app.post('/api/mindmap/:listId', (req, res) => {
   };
 
   writeDB(db);
+  res.json({ success: true, listId });
+});
+
+app.delete('/api/mindmap/:listId', (req, res) => {
+  const { listId } = req.params;
+  const db = readDB();
+  if (db.mindmaps && db.mindmaps[listId]) {
+    delete db.mindmaps[listId];
+    writeDB(db);
+  }
+  res.json({ success: true, listId });
+});
+
+// 4.1 Route Track Persistence (GET, POST & DELETE)
+app.get('/api/track/:listId', (req, res) => {
+  const { listId } = req.params;
+  const db = readDB();
+  const track = (db.tracks && db.tracks[listId]) || null;
+  res.json(track);
+});
+
+app.post('/api/track/:listId', (req, res) => {
+  const { listId } = req.params;
+  const { track } = req.body;
+  const db = readDB();
+  if (!db.tracks) db.tracks = {};
+  if (track) {
+    db.tracks[listId] = track;
+  } else {
+    delete db.tracks[listId];
+  }
+  writeDB(db);
+  res.json({ success: true, listId });
+});
+
+app.delete('/api/track/:listId', (req, res) => {
+  const { listId } = req.params;
+  const db = readDB();
+  if (db.tracks && db.tracks[listId]) {
+    delete db.tracks[listId];
+    writeDB(db);
+  }
   res.json({ success: true, listId });
 });
 

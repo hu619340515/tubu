@@ -1854,7 +1854,12 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       {/* Left: Two-Step Outdoor Route Map Panel (40% width) */}
       {isMapOpen && (
         <div className="w-full md:w-[40%] xl:w-[40%] h-[42vh] md:h-full shrink-0 relative z-10 border-b md:border-b-0 md:border-r border-[#D9D4C7]">
-          <RouteMapPanel onClose={toggleMap} />
+          <RouteMapPanel
+            listId={listId}
+            listTitle={listTitle}
+            destination={destination}
+            onClose={toggleMap}
+          />
         </div>
       )}
 

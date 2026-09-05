@@ -271,18 +271,8 @@ export const storageService = {
       const { passwordHash, ...safeUser } = newUser;
       this.setActiveUser(safeUser);
 
-      // Seed initial hiking list for new user
-      const initialLists: HikingList[] = [
-        {
-          id: 'list-' + Date.now().toString(36) + '-1',
-          userId: safeUser.id,
-          ...TEMPLATE_LISTS[0],
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          isFavorite: true,
-        },
-      ];
-      this.saveUserLists(safeUser.id, initialLists);
+      // New users have strictly empty list data
+      this.saveUserLists(safeUser.id, []);
 
       return { success: true, user: safeUser };
     } catch (e: any) {
@@ -360,33 +350,32 @@ export const storageService = {
       const raw = localStorage.getItem(key);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const totalItems = parsed.reduce(
-            (sum: number, l: any) => sum + (Array.isArray(l.items) ? l.items.length : 0),
-            0
-          );
-          if (totalItems > 0) {
-            return this.normalizeLists(parsed, userId);
-          }
+        if (Array.isArray(parsed)) {
+          return this.normalizeLists(parsed, userId);
         }
       }
 
-      // If empty for this user or all cached lists have 0 items, populate based on full templates
-      const seeded: HikingList[] = TEMPLATE_LISTS.map((tpl, idx) => ({
-        id: `list-${userId}-${idx + 1}`,
-        userId,
-        ...tpl,
-        customCategories: tpl.customCategories || [...DEFAULT_CATEGORIES],
-        createdAt: Date.now() - idx * 86400000,
-        updatedAt: Date.now() - idx * 43200000,
-        isFavorite: idx === 0,
-      }));
+      // ONLY for user-wangzai: if lists have never been initialized, populate default template lists
+      if (userId === 'user-wangzai') {
+        const seeded: HikingList[] = TEMPLATE_LISTS.map((tpl, idx) => ({
+          id: `list-${userId}-${idx + 1}`,
+          userId,
+          ...tpl,
+          customCategories: tpl.customCategories || [...DEFAULT_CATEGORIES],
+          createdAt: Date.now() - idx * 86400000,
+          updatedAt: Date.now() - idx * 43200000,
+          isFavorite: idx === 0,
+        }));
 
-      const normalized = this.normalizeLists(seeded, userId);
-      localStorage.setItem(key, JSON.stringify(normalized));
-      // Save to server
-      this.saveUserLists(userId, normalized);
-      return normalized;
+        const normalized = this.normalizeLists(seeded, userId);
+        localStorage.setItem(key, JSON.stringify(normalized));
+        this.saveUserLists(userId, normalized);
+        return normalized;
+      }
+
+      // For all other users: default is empty list array []
+      localStorage.setItem(key, JSON.stringify([]));
+      return [];
     } catch (e) {
       console.error('Failed to get user lists:', e);
       return [];
@@ -419,45 +408,19 @@ export const storageService = {
         const res = await fetch(`/api/lists/${encodeURIComponent(userId)}`);
         if (res.ok) {
           const serverLists: any[] = await res.json();
-          if (Array.isArray(serverLists) && serverLists.length > 0) {
-            const totalItems = serverLists.reduce(
-              (sum: number, l: any) => sum + (Array.isArray(l.items) ? l.items.length : 0),
-              0
-            );
-            if (totalItems > 0) {
+          if (Array.isArray(serverLists)) {
+            // For non-wangzai users, server list (even if empty []) is accepted directly
+            if (userId !== 'user-wangzai' || serverLists.length > 0) {
               const normalized = this.normalizeLists(serverLists, userId);
               const key = LISTS_PREFIX + userId;
               localStorage.setItem(key, JSON.stringify(normalized));
               return normalized;
             }
           }
-
-          // If server lists are empty or have 0 items, check if local has items
-          const key = LISTS_PREFIX + userId;
-          const localRaw = localStorage.getItem(key);
-          if (localRaw) {
-            const localLists = JSON.parse(localRaw);
-            if (Array.isArray(localLists) && localLists.length > 0) {
-              const totalItems = localLists.reduce(
-                (sum: number, l: any) => sum + (Array.isArray(l.items) ? l.items.length : 0),
-                0
-              );
-              if (totalItems > 0) {
-                const normalized = this.normalizeLists(localLists, userId);
-                this.saveUserLists(userId, normalized);
-                return normalized;
-              }
-            }
-          }
-
-          // If neither has gear items, seed defaults from TEMPLATE_LISTS and push to server
-          const defaultLists = this.getUserLists(userId);
-          this.saveUserLists(userId, defaultLists);
-          return defaultLists;
         }
       }
     } catch (e) {
-      console.warn('[Storage] Fetch user lists from server failed, using local cache:', e);
+      console.warn('[Storage] Fetch user lists from server failed:', e);
     }
     return this.getUserLists(userId);
   },

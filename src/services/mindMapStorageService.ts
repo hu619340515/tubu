@@ -124,6 +124,25 @@ export const mindMapStorageService = {
     }
   },
 
+  deleteMindMap(listId: string): void {
+    if (!listId) return;
+    try {
+      localStorage.removeItem(STORAGE_PREFIX + listId);
+      localStorage.removeItem(`hike_edges_${listId}`);
+      localStorage.removeItem(`hike_mindmap_layoutmode_${listId}`);
+      localStorage.removeItem(`hike_mindmap_viewport_${listId}`);
+      localStorage.removeItem(`hike_mindmap_mapopen_${listId}`);
+
+      if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
+        fetch(`/api/mindmap/${encodeURIComponent(listId)}`, {
+          method: 'DELETE',
+        }).catch((e) => console.warn('[MindMapStorage] Cloud delete error:', e));
+      }
+    } catch (e) {
+      console.error('Failed to delete mind map:', e);
+    }
+  },
+
   resetToPreset(listId: string, presetId: string): MindMapNode {
     const matched = PRESET_MINDMAPS.find((p) => p.id === presetId) || PRESET_MINDMAPS[0];
     const cloned = JSON.parse(JSON.stringify(matched.root));
